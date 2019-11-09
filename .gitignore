@@ -1,0 +1,5 @@
+.env
+cert.pem
+saml/certs/sp.crt
+saml/certs/sp.key
+wireguard/*.conf

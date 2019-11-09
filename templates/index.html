@@ -17,33 +17,32 @@
   <div class="alert alert-danger" role="alert">Not authenticated</div>
 {% endif %}
 
-{% if success_slo %}
-  <div class="alert alert-success" role="alert">Successfully logged out</div>
-{% endif %}
-
 {% if paint_logout %}
-  {% if attributes %}
-    <table class="table table-striped">
-      <thead>
-        <th>Name</th><th>Values</th>
-      </thead>
-      <tbody>
-        {% for attr in attributes %}
-          <tr><td>{{ attr.0 }}</td>
-          <td><ul class="list-unstyled">
-            {% for val in attr.1 %}
-              <li>{{ val }}</li>
-            {% endfor %}
-          </ul></td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  {% if vpn_access %}
+    <h2>Success!</h2>
+    <p>This is using Wireguard for VPN. Get a native application for your
+       operating system from the official
+       <a href='https://www.wireguard.com/install' target="_blank">Wireguard website</a>.
+    </p>
+    <p>Below you can see your Wireguard configuration. To add it,
+      <ol>
+        <li>Open your text editor (Windows Editor or macOS TextEdit)</li>
+        <li>Copy and paste the below configuration</li>
+        <li>Save the file as "wireguard.conf"</li>
+        <li>Open the Wireguard application</li>
+        <li>Click "+", "Import tunnel from file", find and open "wireguard.conf"</li>
+        <li>Once imported, delete "wireguard.conf"</li>
+      </ol>
+      To get connected, click "Activate".
+    </p></br>
   {% else %}
-    <div class="alert alert-danger" role="alert">You don't have any attributes</div>
+    <h2>Whoops</h2>
+    <p>Are you allowed to be here...?</p></br>
   {% endif %}
-  <a href="?slo" class="btn btn-danger">Logout</a>
+    <pre>{{ vpn_config }}</pre>
 {% else %}
-  <a href="?sso" class="btn btn-primary">Login</a> <a href="?sso2" class="btn btn-info">Login and access to attrs page</a>
+  <p>Please authenticate to continue...</p>
+  <a href="?sso" class="btn btn-primary">Authenticate</a>
 {% endif %}
 
 {% endblock %}

@@ -11,12 +11,20 @@
             "url": "SERVER_PROTO://SERVER_HOSTNAME/?sls",
             "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
         },
-        "NameIDFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified",
-        "x509cert": "",
-        "privateKey": ""
+        "attributeConsumingService": {
+                "serviceName": "SP test",
+                "serviceDescription": "Test Service",
+                "requestedAttributes": [
+                    {
+                        "name": "User.email",
+                        "isRequired": false
+                    }
+                ]
+        },
+        "NameIDFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"
     },
     "idp": {
-        "entityId": "https://ONELOGIN_DOMAIN.onelogin.com/saml/metadata/ONELOGIN_CONNECTOR_ID",
+        "entityId": "https://app-eu.onelogin.com/saml/metadata/ONELOGIN_CONNECTOR_ID",
         "singleSignOnService": {
             "url": "https://ONELOGIN_DOMAIN.onelogin.com/trust/saml2/http-post/sso/ONELOGIN_CONNECTOR_ID",
             "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
