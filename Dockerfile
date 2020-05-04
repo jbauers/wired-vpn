@@ -1,42 +1,34 @@
-ARG PYTHON_VER=3.8
-ARG ALPINE_VER=3.10
+#FROM golang as builder
+#
+#RUN go get github.com/dgrijalva/jwt-go \
+#           github.com/crewjam/httperr \
+#           github.com/crewjam/saml
+#
+#COPY wg-tools/main.go .
+#RUN CGO_ENABLED=0 GOOS=linux \
+#    go build main.go
+#
 
-FROM python:${PYTHON_VER}-alpine${ALPINE_VER}
+######
+
+#WORKDIR /app
+#COPY --from=builder /go/main .
+
+FROM openresty/openresty:alpine-fat
 
 RUN apk add --no-cache \
-      libressl-dev \
-      libxml2-dev \
-      libxslt-dev
+  ca-certificates \
+  shorewall
 
-ENV WORKDIR /app
-COPY requirements.txt ${WORKDIR}/
+RUN luarocks install lua-resty-http \
+ && luarocks install lua-resty-session \
+ && luarocks install lua-resty-openidc \
+ && luarocks install lua-resty-template
 
-ENV XMLSEC_VER=1.2.29
+COPY entrypoint.sh /
+ENTRYPOINT /entrypoint.sh
 
-RUN apk add --no-cache --virtual .build-deps \
-      build-base \
-      libressl \
-      libffi-dev && \
-    cd /tmp && \
-    wget http://www.aleksey.com/xmlsec/download/xmlsec1-${XMLSEC_VER}.tar.gz && \
-    tar -xvf xmlsec1-${XMLSEC_VER}.tar.gz  && \
-    cd xmlsec1-${XMLSEC_VER} && \
-    ./configure --enable-crypto-dl=no && \
-    make && \
-    make install && \
-    cd .. && \
-    rm -rf /tmp/xmlsec* && \
-    pip3 install --no-cache-dir -r ${WORKDIR}/requirements.txt && \
-    apk del --no-cache .build-deps
+COPY nginx.conf /usr/local/openresty/nginx/conf/
 
-RUN apk add --no-cache wireguard-tools-wg
-
-WORKDIR ${WORKDIR}
-COPY . .
-
-ENV FLASK_APP ${WORKDIR}/index.py
-ENTRYPOINT ${WORKDIR}/docker-entrypoint.sh
-
-VOLUME ["${WORKDIR}/wireguard"]
-EXPOSE 5000
-
+COPY templates /opt/templates
+COPY oidc.env /opt/
