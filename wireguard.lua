@@ -16,9 +16,16 @@ local redis    = require "resty.redis"
 local iputils  = require "resty.iputils"
 local template = require "resty.template"
 
+-- Expire the "ip" key in Redis after "key_ttl" seconds for automated key
+-- rotation.
+--
+-- TODO: Do the same for the "uid" key, but keep the IP mappings longer.
+-- FIXME: 30 seconds may be a bit too short for prod. A month is 2592000.
+local key_ttl = 30
+
 local view = template.new("wireguard.html", "layout.html")
 
--- Capture command output when running wg commands
+-- Capture command output when running wg commands.
 function run_cmd (cmd)
     local f = assert (io.popen (cmd))
     local s = f:read('*all')
@@ -27,7 +34,7 @@ function run_cmd (cmd)
     return res
 end
 
--- Our user is in the header, Nginx has done the auth
+-- Our user is in the header, Nginx has done the auth.
 -- FIXME: Generate IP
 view.uid = ngx.req.get_headers()['Authenticated-User']
 view.ip  = "10.0.0.2"
@@ -39,7 +46,7 @@ if not ok then
     view.err = "failed to connect: "..err
 end
 
--- Ensure the user exists in Redis
+-- Ensure the user exists in Redis.
 local res, err = red:get(view.uid)
 if not res then
     view.err = "failed to get " ..view.uid..": "..err
@@ -52,7 +59,7 @@ if res == ngx.null then
     end
 end
 
--- Serve/add user data from/to Redis
+-- Serve/add user data from/to Redis.
 local res, err = red:hmget(view.ip, "privkey", "pubkey", "psk")
 if not res then
     view.err = "failed to HMGet: "..err
@@ -67,16 +74,20 @@ if res[1] == ngx.null then
     if not ok then
         view.err = "failed to HMSet: "..err
     end
+    ok, err = red:expire(view.ip, key_ttl)
+    if not ok then
+        view.err = "failed to set expire: "..err
+    end
 else
     view.privkey = res[1]
     view.pubkey  = res[2]
     view.psk     = res[3]
 end
 
--- Close the Redis connection
+-- Close the Redis connection.
 redis:set_keepalive(10000, 128)
 
--- Render the page
+-- Render the page.
 if not view.err then
     view.access = true
 end
