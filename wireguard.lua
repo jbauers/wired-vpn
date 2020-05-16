@@ -1,51 +1,83 @@
+-- Redis overview
+-- --------------
+--
+-- uid -> ip
+--
+--        wg1:               10.100.0.1/24
+--        email@example.com: 10.100.0.2/32
+--
+-- ip  -> privkey, pubkey, endpoint, port, allowed_ips
+--
+--        10.100.0.1/24: PRIVKEY, PUBKEY, 192.168.100.1, 51820, 10.0.0.0/16
+--        10.100.0.2/32: PRIVKEY, PUBKEY, 192.168.100.1, 51820, 10.0.0.0/16
+--
+
 local redis    = require "resty.redis"
 local iputils  = require "resty.iputils"
 local template = require "resty.template"
 
 local view = template.new("wireguard.html", "layout.html")
-local uid = ngx.req.get_headers()['Authenticated-User']
 
--- Generate our PrivateKey
-local f = assert (io.popen ("wg genkey"))
-local privkey = f:read('*all')
-f:close()
+-- Capture command output when running wg commands
+function run_cmd (cmd)
+    local f = assert (io.popen (cmd))
+    local s = f:read('*all')
+    local res = string.gsub(s, "[\n\r]", "")
+    f:close()
+    return res
+end
 
--- Generate our PublicKey
-local f = assert (io.popen ("printf '"..privkey.."' | wg pubkey"))
-local pubkey = f:read('*all')
-f:close()
-
-local ip = "10.0.0.2"
-
-view.message = uid..' - '..ip..' - '..privkey..' - '..pubkey
+-- Our user is in the header, Nginx has done the auth
+-- FIXME: Generate IP
+view.uid = ngx.req.get_headers()['Authenticated-User']
+view.ip  = "10.0.0.2"
 
 -- Init our Redis connection
 local red = redis:new()
-red:set_timeouts(1000, 1000, 1000) -- 1 sec
 local ok, err = red:connect("redis", 6379)
 if not ok then
-    view.message = "failed to connect: "..err
-    return
+    view.err = "failed to connect: "..err
 end
 
--- Add our data to Redis
-ok, err = red:hmset(uid, "ip", ip, "privkey", privkey, "pubkey", pubkey)
-if not ok then
-    view.message = "failed to HMSet: "..err
-    return
-end
-
--- Get our data from Redis and do a sanity check
-local res, err = red:hmget(uid, "ip", "privkey", "pubkey")
+-- Ensure the user exists in Redis
+local res, err = red:get(view.uid)
 if not res then
-    view.message = "failed to HMGet: "..err
-    return
+    view.err = "failed to get " ..view.uid..": "..err
 end
 
-if not (privkey == res[2]) or not (pubkey == res[3]) then
-    view.message = "mismatch between server and client keys"
-    return
+if res == ngx.null then
+    ok, err = red:set(view.uid, view.ip)
+    if not ok then
+        view.err = "failed to set " ..view.uid..": "..err
+    end
 end
 
--- Finally, render the page
+-- Serve/add user data from/to Redis
+local res, err = red:hmget(view.ip, "privkey", "pubkey", "psk")
+if not res then
+    view.err = "failed to HMGet: "..err
+end
+
+if res[1] == ngx.null then
+    view.privkey = run_cmd("wg genkey")
+    view.pubkey  = run_cmd("printf '"..view.privkey.."' | wg pubkey")
+    view.psk     = run_cmd("wg genpsk")
+
+    ok, err = red:hmset(view.ip, "privkey", view.privkey, "pubkey", view.pubkey, "psk", view.psk)
+    if not ok then
+        view.err = "failed to HMSet: "..err
+    end
+else
+    view.privkey = res[1]
+    view.pubkey  = res[2]
+    view.psk     = res[3]
+end
+
+-- Close the Redis connection
+redis:set_keepalive(10000, 128)
+
+-- Render the page
+if not view.err then
+    view.access = true
+end
 view:render()
