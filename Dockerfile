@@ -18,12 +18,14 @@ FROM openresty/openresty:alpine-fat
 
 RUN apk add --no-cache \
   ca-certificates \
-  shorewall
+  shorewall \
+  wireguard-tools
 
 RUN luarocks install lua-resty-http \
  && luarocks install lua-resty-session \
  && luarocks install lua-resty-openidc \
- && luarocks install lua-resty-template
+ && luarocks install lua-resty-template \
+ && luarocks install lua-resty-iputils
 
 COPY entrypoint.sh /
 ENTRYPOINT /entrypoint.sh
@@ -31,4 +33,4 @@ ENTRYPOINT /entrypoint.sh
 COPY nginx.conf /usr/local/openresty/nginx/conf/
 
 COPY templates /opt/templates
-COPY oidc.env /opt/
+COPY oidc.env wireguard.lua /opt/

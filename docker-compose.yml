@@ -1,0 +1,19 @@
+version: '3'
+services:
+  oidc:
+    build: .
+    ports:
+      - "80:8080"
+    networks:
+      - redis
+
+  redis:
+    image: "redis:alpine"
+    expose:
+      - "6379"
+    networks:
+      - redis
+
+networks:
+  redis:
+    driver: bridge
