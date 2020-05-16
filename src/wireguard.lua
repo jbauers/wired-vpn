@@ -35,57 +35,60 @@ function run_cmd (cmd)
 end
 
 -- Our user is in the header, Nginx has done the auth.
--- FIXME: Generate IP
 view.uid = ngx.req.get_headers()['Authenticated-User']
-view.ip  = "10.0.0.2"
 
 -- Init our Redis connection
 local red = redis:new()
+red:set_timeout(1000)
 local ok, err = red:connect("redis", 6379)
 if not ok then
     view.err = "failed to connect: "..err
 end
 
--- Ensure the user exists in Redis.
+local res, err = red:publish("clients", view.uid)
+if not res then
+    view.err = "failed to publish "..err
+end
+
+local res, err = red:subscribe(view.uid)
+if not res then
+    view.err = "failed to subscribe "..err
+end
+
+red:set_timeout(10)
+for i = 1, 2 do
+    local res, err = red:read_reply()
+    if not res then
+        if err ~= "timeout" then
+            view.err = "failed to read reply: "..err
+            return
+        end
+    end
+end
+red:set_timeout(1000)
+
+local res, err = red:unsubscribe(view.uid)
+if not res then
+    view.err = "failed to subscribe "..err
+end
+
+-- Get data from Redis.
 local res, err = red:get(view.uid)
 if not res then
     view.err = "failed to get " ..view.uid..": "..err
 end
+view.ip = res
 
-if res == ngx.null then
-    ok, err = red:set(view.uid, view.ip)
-    if not ok then
-        view.err = "failed to set " ..view.uid..": "..err
-    end
-end
-
--- Serve/add user data from/to Redis.
 local res, err = red:hmget(view.ip, "privkey", "pubkey", "psk")
 if not res then
     view.err = "failed to HMGet: "..err
 end
-
-if res[1] == ngx.null then
-    view.privkey = run_cmd("wg genkey")
-    view.pubkey  = run_cmd("printf '"..view.privkey.."' | wg pubkey")
-    view.psk     = run_cmd("wg genpsk")
-
-    ok, err = red:hmset(view.ip, "privkey", view.privkey, "pubkey", view.pubkey, "psk", view.psk)
-    if not ok then
-        view.err = "failed to HMSet: "..err
-    end
-    ok, err = red:expire(view.ip, key_ttl)
-    if not ok then
-        view.err = "failed to set expire: "..err
-    end
-else
-    view.privkey = res[1]
-    view.pubkey  = res[2]
-    view.psk     = res[3]
-end
+view.privkey = res[1]
+view.pubkey  = res[2]
+view.psk     = res[3]
 
 -- Close the Redis connection.
-redis:set_keepalive(10000, 128)
+redis:close()
 
 -- Render the page.
 if not view.err then
