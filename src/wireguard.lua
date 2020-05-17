@@ -13,31 +13,15 @@
 --
 
 local redis    = require "resty.redis"
-local iputils  = require "resty.iputils"
 local template = require "resty.template"
-
--- Expire the "ip" key in Redis after "key_ttl" seconds for automated key
--- rotation.
---
--- TODO: Do the same for the "uid" key, but keep the IP mappings longer.
--- FIXME: 30 seconds may be a bit too short for prod. A month is 2592000.
-local key_ttl = 30
 
 local view = template.new("wireguard.html", "layout.html")
 
--- Capture command output when running wg commands.
-function run_cmd (cmd)
-    local f = assert (io.popen (cmd))
-    local s = f:read('*all')
-    local res = string.gsub(s, "[\n\r]", "")
-    f:close()
-    return res
-end
-
--- Our user is in the header, Nginx has done the auth.
+-- Nginx has done the auth and added the email address to this
+-- header.
 view.uid = ngx.req.get_headers()['Authenticated-User']
 
--- Init our Redis connection
+-- Init our Redis Pub/Sub.
 local red = redis:new()
 red:set_timeout(1000)
 local ok, err = red:connect("redis", 6379)
@@ -45,16 +29,24 @@ if not ok then
     view.err = "failed to connect: "..err
 end
 
+-- Send our email address to the "clients" channel, where our
+-- backend is listening for messages.
 local res, err = red:publish("clients", view.uid)
 if not res then
     view.err = "failed to publish "..err
 end
 
+-- Once we've announces us as a client, subscribe to a channel
+-- with our email address as the key. Our backend replies with
+-- an "ok" on this channel.
 local res, err = red:subscribe(view.uid)
 if not res then
     view.err = "failed to subscribe "..err
 end
 
+-- This is needed to render the page AFTER we got a reply from
+-- the server. No idea why it has to be like this specifically,
+-- but it works. TODO: Someone explain and optimize if needed.
 red:set_timeout(10)
 for i = 1, 2 do
     local res, err = red:read_reply()
@@ -67,12 +59,15 @@ for i = 1, 2 do
 end
 red:set_timeout(1000)
 
+-- Once we got the "ok", we know the backend has added keys
+-- for us, and don't care about our own channel anymore.
 local res, err = red:unsubscribe(view.uid)
 if not res then
     view.err = "failed to subscribe "..err
 end
 
--- Get data from Redis.
+-- We can now fetch the data from Redis. We need our IP first,
+-- which is the key to our hash map with our WireGuard keys.
 local res, err = red:get(view.uid)
 if not res then
     view.err = "failed to get " ..view.uid..": "..err
@@ -87,10 +82,8 @@ view.privkey = res[1]
 view.pubkey  = res[2]
 view.psk     = res[3]
 
--- Close the Redis connection.
+-- Then we can terminate the Redis connection and render the page.
 redis:close()
-
--- Render the page.
 if not view.err then
     view.access = true
 end

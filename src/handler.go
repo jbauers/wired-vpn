@@ -3,11 +3,15 @@ package main
 import (
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/go-redis/redis"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
+
+// Expiry of Redis keys for WireGuard key rotation.
+var keyTTL = time.Duration(10*time.Second)
 
 func check(e error) {
     if e != nil {
@@ -44,25 +48,32 @@ func iterateIp(ip net.IP) net.IP {
 	return i
 }
 
-func genKeyPair() (privkey string, pubkey string) {
+func genKeys() (privkey string, pubkey string, psk string) {
 	k, err := wgtypes.GeneratePrivateKey()
+	check(err)
+
+	sk, err := wgtypes.GenerateKey()
 	check(err)
 
 	privkey = k.String()
 	pubkey  = k.PublicKey().String()
 
-	return privkey, pubkey
+	psk = sk.String()
+
+	return privkey, pubkey, psk
 }
 
 func redisClient() (client *redis.Client) {
 	client = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379", // FIXME
-		Password: "",
-		DB:       0,
+		Addr:       "localhost:6379", // FIXME
+		Password:   "",
+		DB:         0,
+		MaxRetries: 3,
 	})
 	return client
 }
 
+// FIXME: Ugly.
 func handleClient (uid string) (string) {
 	ip := "10.0.0.4/24"
 	valid := false
@@ -78,6 +89,8 @@ func handleClient (uid string) (string) {
 			return ""
 		}
 		err := rc.Set(uid, ip, 0).Err()
+		check(err)
+		_, err = rc.Expire(uid, keyTTL).Result()
 		check(err)
 	} else if err != nil {
 		panic(err)
@@ -106,32 +119,22 @@ func handleClientKeys (ip string) (present bool) {
 	return present
 }
 
-func main() {
-	rc := redisClient()
-	pubsub := rc.Subscribe("clients")
-	pubsub.Receive()
+// FIXME: WIP.
+func printWireguardInfo() {
 
-	ch := pubsub.Channel()
-	for msg := range ch {
-		ip := handleClient(msg.Payload)
-		fmt.Println(msg.Payload, ip)
-		if !handleClientKeys(ip) {
-			privkey, pubkey := genKeyPair()
-			_, err := rc.HMSet(ip, "pubkey", pubkey, "privkey", privkey).Result()
-			check(err)
-		}
-		rc.Publish(msg.Payload, "ok")
-	}
+	// Generate server keys.
+	k, err := wgtypes.GeneratePrivateKey()
+	check(err)
+	privkey := k.String()
+	pubkey  := k.PublicKey().String()
 
+	fmt.Println("------Server keys------")
+	fmt.Println("PrivateKey = ", privkey)
+	fmt.Println("PublicKey  = ", pubkey)
+	fmt.Println("-----------------------")
 
-	//////////////////////////////////////////////////////////////
 	wc, err := wgctrl.New()
 	check(err)
-
-	privkey, pubkey := genKeyPair()
-	fmt.Println("------------")
-	fmt.Println(privkey)
-	fmt.Println(pubkey)
 
 	devices, err := wc.Devices()
 	check(err)
@@ -149,5 +152,27 @@ func main() {
 	device, err := wc.Device("wg0")
 	check(err)
 	fmt.Println(device)
+}
+
+func main() {
+	printWireguardInfo()
+
+	rc := redisClient()
+	pubsub := rc.Subscribe("clients")
+	pubsub.Receive()
+
+	ch := pubsub.Channel()
+	for msg := range ch {
+		ip := handleClient(msg.Payload)
+		fmt.Println(msg.Channel, msg.Payload, ip)
+		if !handleClientKeys(ip) {
+			privkey, pubkey, psk := genKeys()
+			_, err := rc.HMSet(ip, "pubkey", pubkey, "privkey", privkey, "psk", psk).Result()
+			check(err)
+			_, err = rc.Expire(ip, keyTTL).Result()
+			check(err)
+		}
+		rc.Publish(msg.Payload, "ok")
+	}
 }
 
