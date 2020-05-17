@@ -68,13 +68,13 @@ end
 
 -- We can now fetch the data from Redis. We need our IP first,
 -- which is the key to our hash map with our WireGuard keys.
-local res, err = red:get(view.uid)
-if not res then
+local ip, err = red:get(view.uid)
+if not ip then
     view.err = "failed to get " ..view.uid..": "..err
 end
-view.ip = res
+view.ip = ip
 
-local res, err = red:hmget(view.ip, "privkey", "pubkey", "psk")
+local res, err = red:hmget(ip, "privkey", "pubkey", "psk")
 if not res then
     view.err = "failed to HMGet: "..err
 end

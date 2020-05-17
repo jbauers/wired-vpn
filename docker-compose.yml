@@ -1,16 +1,31 @@
 version: '3'
 services:
-  oidc:
-    build: .
+  frontend:
+    build: ./frontend
     ports:
       - "80:8080"
+    depends_on:
+      - backend
+    networks:
+      - redis
+
+  backend:
+    build:
+      context: ./backend
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      - redis
     networks:
       - redis
 
   redis:
     image: "redis:alpine"
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - /data
     networks:
       - redis
 
