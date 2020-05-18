@@ -130,7 +130,7 @@ func handleClientKeys(ip string) (bool) {
 
 
 // FIXME: WIP.
-func initServer() {
+func initServer() (pubkey string) {
 	rc := redisClient()
 
 	// Add all our IPs to this Redis key. We simply remove an entry
@@ -150,7 +150,6 @@ func initServer() {
 		check(err)
 	}
 
-	pubkey := ""
 	privkey := ""
 
 	res, err := rc.HMGet(serverIP, "pubkey", "privkey").Result()
@@ -198,10 +197,12 @@ func initServer() {
 		fmt.Println(d.FirewallMark)
 		fmt.Println(d.Peers)
 	}
+
+	return pubkey
 }
 
 func main() {
-	initServer()
+	serverkey := initServer()
 
 	rc := redisClient()
 	pubsub := rc.Subscribe("clients")
@@ -211,6 +212,6 @@ func main() {
 	for msg := range ch {
 		ip := handleClient(msg.Payload)
 		fmt.Println(msg.Channel, msg.Payload, ip)
-		rc.Publish(msg.Payload, ip)
+		rc.Publish(msg.Payload, serverkey)
 	}
 }

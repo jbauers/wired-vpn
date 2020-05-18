@@ -55,6 +55,8 @@ for i = 1, 2 do
             view.err = "failed to read reply: "..err
             return
         end
+    else
+        view.serverkey = res[3]
     end
 end
 red:set_timeout(1000)
