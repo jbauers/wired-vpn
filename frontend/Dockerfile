@@ -14,4 +14,4 @@ ENTRYPOINT /entrypoint.sh
 COPY nginx.conf /usr/local/openresty/nginx/conf/
 
 COPY templates /opt/templates
-COPY oidc.env frontend.lua /opt/
+COPY oidc.env src/ /opt/

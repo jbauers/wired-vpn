@@ -3,10 +3,15 @@ FROM golang as builder
 RUN go get github.com/go-redis/redis
 RUN go get golang.zx2c4.com/wireguard/wgctrl
 
-COPY backend.go .
+COPY src .
 RUN CGO_ENABLED=0 GOOS=linux \
-    go build backend.go
+    go build *.go
 
+##########
 FROM alpine
-COPY --from=builder /go/backend /opt/
-CMD /opt/backend
+RUN apk add --no-cache bash
+
+COPY entrypoint.sh wireguard.env /
+ENTRYPOINT /entrypoint.sh
+
+COPY --from=builder /go/main /opt/backend
