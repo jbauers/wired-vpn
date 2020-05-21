@@ -1,12 +1,16 @@
 # Wired VPN
 
-## <b>WIP</b> note!!
+# Very much WIP!!
 
-`./run.sh` to start the frontend
-
-`./test.sh` to start the backend
+Definitely multiple dragons here.
 
 # Overview
+
+Docker based WireGuard server with OIDC support (Google SSO has been tested so far). A small Openresty frontend, a small Golang backend and Redis in between.
+
+## Running
+
+`./run.sh` (throwaway) or `docker-compose up` (persistent data).
 
 ### Frontend
 
@@ -23,13 +27,15 @@ After authentication, Nginx passes our `Authenticated-User` to `src/wireguard.lu
 
 ### Backend
 
-The backend is a small Go program. If it receives a message on a specific Redis channel, it checks whether a user exists in Redis. If not, it generates the WireGuard keys and adds them to Redis. It then pings Openresty that the work is done. Key rotation is taken care of using Redis `EXPIRE`.
+Small <b>Golang</b> program with the following packages:
+
+- github.com/go-redis/redis
+- golang.zx2c4.com/wireguard/wgctrl
+
+If the backend receives a Redis message on a specific channel, it checks whether a user exists. If not, it generates the WireGuard keys, adds them to Redis, and updates the WireGuard interface. It then pings Openresty that the work is done. Key rotation is taken care of using Redis `EXPIRE`.
 
 # TODO
 
-No interface is currently configured, no peers are added. This is the basic Pub/Sub for the frontend and backend.
-
-- Bringing up the WireGuard server
-- Adding firewall rules
-- Updating server configurations on changes
-- Lots more...
+- Cleaning up, documentation
+- Firewall rules
+- DNS, AllowedIPs client-side
