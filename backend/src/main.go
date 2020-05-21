@@ -1,16 +1,16 @@
 package main
 
 import (
-	"net"
+	"encoding/json"
 	"os"
 	"time"
+	"strconv"
 )
 
-var serverInterface = os.Getenv("WG_INTERFACE")
-var serverCIDR = os.Getenv("WG_NETWORK")
+var serverInterface = os.Getenv("WG_SERVER_INTERFACE")
+var serverCIDR = os.Getenv("WG_SERVER_CIDR")
 var serverIP = os.Getenv("WG_SERVER_IP")
-var serverPort = 51820
-var allowedIPs []net.IPNet
+var serverEndpoint = os.Getenv("WG_SERVER_ENDPOINT")
 
 // Expiry of Redis keys for WireGuard key rotation.
 var keyTTL = time.Duration(10 * time.Second)
@@ -23,18 +23,36 @@ func check(e error) {
 }
 
 func main() {
-	privkey, pubkey := initServer()
+	serverPrivkey, serverPubkey := initServer()
+
+	serverPort, err := strconv.Atoi(os.Getenv("WG_SERVER_PORT"))
+	check(err)
 
 	rc := redisClient()
 	pubsub := rc.Subscribe("clients")
 	pubsub.Receive()
 
+	type serverInfo struct {
+		Pubkey string
+		Endpoint string
+		Port int
+	}
+
+	info := serverInfo{
+		Pubkey: serverPubkey,
+		Endpoint: serverEndpoint,
+		Port: serverPort,
+	}
+
+	jsonData, err := json.Marshal(info)
+
 	ch := pubsub.Channel()
 	for msg := range ch {
 		_ = handleClient(msg.Payload)
-		rc.Publish(msg.Payload, pubkey)
+		err := rc.Publish(msg.Payload, jsonData).Err()
+		check(err)
 
 		peerList := getPeerList()
-		updateInterface(serverInterface, serverPort, privkey, peerList)
+		updateInterface(serverInterface, serverPort, serverPrivkey, peerList)
 	}
 }

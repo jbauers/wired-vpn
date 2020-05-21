@@ -29,7 +29,7 @@ func generatePeerConfig(ip string, pubkey string, psk string) (config wgtypes.Pe
 	ppsk, err := wgtypes.ParseKey(psk)
 	check(err)
 
-	allowedIPs = getAllowedIP(ip)
+	allowedIPs := getAllowedIP(ip)
 
 	config = wgtypes.PeerConfig{PublicKey: key,
 		PresharedKey:      &ppsk,

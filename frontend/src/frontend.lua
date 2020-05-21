@@ -11,7 +11,7 @@
 --        10.100.0.1/24: PRIVKEY, PUBKEY, 192.168.100.1, 51820, 10.0.0.0/16
 --        10.100.0.2/32: PRIVKEY, PUBKEY, 192.168.100.1, 51820, 10.0.0.0/16
 --
-
+local cjson    = require "cjson"
 local redis    = require "resty.redis"
 local template = require "resty.template"
 
@@ -56,7 +56,10 @@ for i = 1, 2 do
             return
         end
     else
-        view.serverkey = res[3]
+        data = cjson.decode(res[3])
+        view.serverKey = data["Pubkey"]
+        view.serverEndpoint = data["Endpoint"]
+        view.serverPort = data["Port"]
     end
 end
 red:set_timeout(1000)
