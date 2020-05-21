@@ -4,6 +4,7 @@ import (
 	"net"
 )
 
+// Get all valid hosts in a subnet.
 func hosts(cidr string) ([]string, error) {
 	ip, ipnet, err := net.ParseCIDR(cidr)
 	if err != nil {
@@ -33,4 +34,14 @@ func iterateHosts(ip net.IP) {
 			break
 		}
 	}
+}
+
+func getAllowedIP(ip string) []net.IPNet {
+	_, ipnet, err := net.ParseCIDR(serverCIDR)
+	network := *ipnet
+	network.IP = net.ParseIP(ip)
+	check(err)
+
+	allowedIP := []net.IPNet{network}
+	return allowedIP
 }
