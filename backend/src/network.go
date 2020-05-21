@@ -36,12 +36,15 @@ func iterateHosts(ip net.IP) {
 	}
 }
 
+// Get the allowed IP. This may only be a /32 (for IPv4).
 func getAllowedIP(ip string) []net.IPNet {
-	_, ipnet, err := net.ParseCIDR(serverCIDR)
-	network := *ipnet
-	network.IP = net.ParseIP(ip)
+	_, ipnet, err := net.ParseCIDR("0.0.0.0/32")
 	check(err)
 
+	network := *ipnet
+	network.IP = net.ParseIP(ip)
+
 	allowedIP := []net.IPNet{network}
+
 	return allowedIP
 }
