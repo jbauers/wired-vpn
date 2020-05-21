@@ -1,8 +1,13 @@
-#!/usr/bin/env sh
+#/usr/bin/env sh
 
-docker build -t saml-wireguard . || exit 1
-docker run -p 5000:5000 \
-           --name wireguard-saml \
-           --rm \
-           saml-wireguard \
-       || exit 1
+# "./run.sh" to spin up a fresh environment during
+# development. Use "docker-compose up" if persistence
+# is wanted.
+
+down() {
+	docker-compose down
+}
+
+trap down TERM SIGINT
+
+docker-compose up --build --force-recreate -V

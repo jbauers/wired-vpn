@@ -1,0 +1,34 @@
+version: '3'
+
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:8080"
+    depends_on:
+      - backend
+    networks:
+      - redis
+
+  backend:
+    build: ./backend
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      - redis
+    networks:
+      - redis
+
+  redis:
+    image: "redis:alpine"
+    expose:
+      - "6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - /data
+    networks:
+      - redis
+
+networks:
+  redis:
+    driver: bridge

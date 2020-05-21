@@ -1,114 +1,41 @@
-# SAML Wireguard
+# Wired VPN
 
-- [Docker Python Alpine](https://hub.docker.com/_/python) base
-- [python3-saml](https://github.com/onelogin/python3-saml) by OneLogin
-- [Wireguard](https://wiki.archlinux.org/index.php/WireGuard) tools
-- A few lines `/bin/sh`
+# Very much WIP!!
 
-<b>DISCLAIMER</b> - DO NOT USE IN PRODUCTION.
+Definitely multiple dragons here.
 
-# SAML setup
+# Overview
 
-To enable SAML, you will need to set up an application on your identity
-provider's side, as well as configure your side. This example works with
-OneLogin as the identity provider.
+Docker based WireGuard server with OIDC support (Google SSO has been tested so far). A small Openresty frontend, a small Golang backend and Redis in between.
 
-- [How SAML works](https://developers.onelogin.com/saml)
+## Running
 
-## OneLogin
+`./run.sh` (throwaway) or `docker-compose up` (persistent data).
 
-Adjust the [.env](./example.env) file with your OneLogin settings:
+### Frontend
 
-```
-ONELOGIN_DOMAIN= # Your organization's domain - https://<DOMAIN>.onelogin.com
-ONELOGIN_CONNECTOR_ID= # The connector ID, copied from the SSO tab of your app
-```
+<b>Openresty</b> with the following modules:
 
-You also need to add OneLogin's certificate as `cert.pem`:
+- lua-resty-http
+- lua-resty-session
+- lua-resty-openidc
+- lua-resty-template
 
-- Copy the X.509 certificate from `https://<DOMAIN>.onelogin.com/certificates`
-- Save it as `cert.pem`
-- Remove any line breaks, so that you end up having one single line in `cert.pem`
+Users are authenticated with the OpenIDC module. See `nginx.conf`. Google SSO has been tested so far.
 
-[This page](https://developers.onelogin.com/saml/python) has some additional
-information.
+After authentication, Nginx passes our `Authenticated-User` to `src/wireguard.lua`. This script talks to our backend using Redis Pub/Sub. It fetches all information from Redis and adds the content for the page.
 
-If your OneLogin instance is <b>located in the US</b> you will have to change
-`app-eu` to `app-us` in [saml/settings.json](./saml/settings.json). You can also
-adjust this file to support other identity providers than OneLogin. Have a look
-at the [python3-saml](https://github.com/onelogin/python3-saml) documentation.
+### Backend
 
-## SAML service provider
+Small <b>Golang</b> program with the following packages:
 
-Generate a service provider (`sp`) certificate and key as follows:
+- github.com/go-redis/redis
+- golang.zx2c4.com/wireguard/wgctrl
 
-```
-openssl req -new \
-            -x509 \
-            -days 3652 \
-            -nodes \
-        -out ./saml/certs/sp.crt \
-        -keyout ./saml/certs/sp.key
-```
+If the backend receives a Redis message on a specific channel, it checks whether a user exists. If not, it generates the WireGuard keys, adds them to Redis, and updates the WireGuard interface. It then pings Openresty that the work is done. Key rotation is taken care of using Redis `EXPIRE`.
 
-# Wireguard
+# TODO
 
-Adjust the `WG_` Wireguard variables in [.env](./example.env) as needed.
-
-- [docker-entrypoint.sh](./docker-entrypoint.sh) will create the server's
-configuration file and keys
-- [wireguard.sh](./wireguard.sh) will add new peers
-
-The application will only generate a VPN config when the SAML attribute
-`memberOf` contains an entry `VPN`, assuming you have set up a corresponding
-mapping in OneLogin. You can adjust the `vpn_access` behaviour in
-[index.py](./index.py).
-
-#### This is not a Wireguard server!
-
-This application only generates the files for a server. You could bind mount the
-[wireguard](./wireguard) directory to the host running the server, periodically
-`docker cp` out the directory, share it over a network, or get it to the
-Wireguard server any other way.
-
-# Usage
-
-1. Go through the [SAML setup](#saml-setup) above
-1. `./run.sh` to build and run the image
-1. Visit http://localhost:5000
-
-<b>NOTE:</b> The first build is slow, the `xmlsec` layer takes a while. See
-[Building](#building).
-
-## Persistent data
-
-- There's a [wireguard](./wireguard) volume in the [Dockerfile](./Dockerfile),
-for testing you can remove the `--rm` flag from [run.sh](./run.sh)
-- The [saml/certs](./saml/certs) directory is copied into the image
-
-You could also bind mount these directories.
-
-## Building
-
-We're using Python 3, with Flask and OneLogin's
-[python3-saml](https://github.com/onelogin/python3-saml). For versions, see
-[requirements.txt](./requirements.txt).
-
-Compiling `xmlsec` on Alpine will take a long time, but we end up with an image
-half the size compared to Debian slim. From source is necessary because `xmlsec`
-packages are broken for Alpine `>= 3.8` - see
-[here](https://gitlab.alpinelinux.org/alpine/aports/issues/9110) and
-[here](https://github.com/IdentityPython/pysaml2/issues/533#issuecomment-442386985).
-
-### Image size
-
-[Dive](https://github.com/wagoodman/dive) reports:
-
-```
-[Image Details]────────────────────────────────────
-
-Total Image size: 200 MB
-Potential wasted space: 1.3 MB
-Image efficiency score: 99 %
-```
-
+- Cleaning up, documentation
+- Firewall rules
+- DNS, AllowedIPs client-side
