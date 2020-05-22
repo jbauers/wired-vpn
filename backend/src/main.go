@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 	"os"
-	"time"
 	"strconv"
+	"time"
 )
 
 var serverInterface = os.Getenv("WG_SERVER_INTERFACE")
@@ -32,16 +32,17 @@ func main() {
 	pubsub := rc.Subscribe("clients")
 	pubsub.Receive()
 
+	// TODO: Move.
 	type serverInfo struct {
-		Pubkey string
+		Pubkey   string
 		Endpoint string
-		Port int
+		Port     int
 	}
 
 	info := serverInfo{
-		Pubkey: serverPubkey,
+		Pubkey:   serverPubkey,
 		Endpoint: serverEndpoint,
-		Port: serverPort,
+		Port:     serverPort,
 	}
 
 	jsonData, err := json.Marshal(info)
