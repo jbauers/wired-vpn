@@ -14,9 +14,17 @@ if err or not res then
     ngx.exit(ngx.HTTP_FORBIDDEN)
 end
 
-if not res.user then
+if not res.user.email then
     ngx.status = 400
     ngx.exit(ngx.HTTP_BAD_REQUEST)
+end
+
+local lastAt = res.user.email:find("[^%@]+$")
+local domainPart = res.user.email:sub(lastAt, #res.user.email)
+
+if domainPart ~= os.getenv('EMAIL_DOMAIN') then
+    ngx.status = 403
+    ngx.exit(ngx.HTTP_FORBIDDEN)
 end
 
 ngx.req.set_header('Authenticated-User', res.user.email)
