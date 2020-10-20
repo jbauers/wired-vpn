@@ -17,86 +17,78 @@ func redisClient() (client *redis.Client) {
 	return client
 }
 
-func handleClient(uid string) (ip string) {
-	rc := redisClient()
-	val, err := rc.Get(uid).Result()
+func assignIP(rc *redis.Client) (ip string) {
+	res, err := rc.SMembers("usedIPs").Result()
+	check(err)
 
-	if err == redis.Nil || val == "" {
-		res, err := rc.SMembers("usedIPs").Result()
-		check(err)
-
-		for _, r := range res {
-			ip = incrementIP(r)
-			for stringInSlice(ip, res) {
-				ip = incrementIP(ip)
-			}
+	for _, r := range res {
+		ip = incrementIP(r)
+		for stringInSlice(ip, res) {
+			ip = incrementIP(ip)
 		}
-
-		// Add them to the used IP pool.
-		err = rc.SAdd("usedIPs", ip).Err()
-		check(err)
-
-		// Add the UID -> IP mapping.
-		err = rc.Set(uid, ip, 0).Err()
-		check(err)
-
-		log.Print("Added user " + uid + " with IP " + ip)
-
-	} else {
-		ip = val
-		log.Print("Existing user " + uid + " with IP " + ip)
 	}
+
+	err = rc.SAdd("usedIPs", ip).Err()
+	check(err)
 
 	return ip
 }
 
-func handleClientKeys(ip string) (config wgtypes.PeerConfig) {
-	rc := redisClient()
-	res, err := rc.HMGet(ip, "pubkey", "privkey", "psk").Result()
+func handleClient(uid string, rc *redis.Client) (config wgtypes.PeerConfig) {
+	user, err := rc.HMGet(uid, "ip", "pubkey", "privkey", "psk").Result()
 	check(err)
 
-	privkey := ""
+	ip := ""
 	pubkey := ""
+	privkey := ""
 	psk := ""
 
-	for p, r := range res {
-		if r == nil {
-			// Generate all keys.
-			privkey, pubkey, psk = genKeys()
+	if user[0] == nil {
+		privkey, pubkey, psk = genKeys()
+		ip = assignIP(rc)
 
-			// Add the generated keys to Redis.
-			_, err := rc.HMSet(ip, "pubkey", pubkey, "privkey", privkey, "psk", psk).Result()
-			check(err)
+		_, err = rc.HMSet(uid, "ip", ip, "pubkey", pubkey, "privkey", privkey, "psk", psk).Result()
+		check(err)
 
-			// Set an expiry for our keys, so Redis automatically cleans up.
-			_, err = rc.Expire(ip, keyTTL).Result()
-			check(err)
-		} else {
-			// See the HMGet above for indexes.
-			if p == 0 {
+		err = rc.SAdd("users", uid).Err()
+		check(err)
+
+		log.Print(" +++  ADD  --- " + uid + " - " + ip + " - " + pubkey)
+
+		// Set an expiry for our keys, so Redis automatically cleans up.
+		// FIXME: Clean up usedIPs.
+		//
+		// _, err = rc.Expire(uid, keyTTL).Result()
+		// check(err)
+
+	} else {
+		for i, r := range user {
+			if i == 0 {
+				ip = r.(string)
+			}
+			if i == 1 {
 				pubkey = r.(string)
 			}
-			if p == 2 {
+			if i == 3 {
 				psk = r.(string)
 			}
 		}
+		log.Print(" +++ EXIST --- " + uid + " - " + ip + " - " + pubkey)
 	}
 
-	config = generatePeerConfig(ip, pubkey, psk)
+	config = getPeerConfig(ip, pubkey, psk)
 	return config
 }
 
-func getPeerList() (peerList []wgtypes.PeerConfig) {
-	rc := redisClient()
-
-	res, err := rc.SMembers("usedIPs").Result()
+func getPeerList(rc *redis.Client) (peerList []wgtypes.PeerConfig) {
+	res, err := rc.SMembers("users").Result()
 	check(err)
 
 	for _, r := range res {
 		if r == "" {
 			log.Print("No peers!")
 		} else {
-			config := handleClientKeys(r)
+			config := handleClient(r, rc)
 			peerList = append(peerList, config)
 		}
 	}
@@ -104,32 +96,19 @@ func getPeerList() (peerList []wgtypes.PeerConfig) {
 	return peerList
 }
 
-func initServer() (privkey string, pubkey string) {
-	rc := redisClient()
-
-	// Remove the server IP from the available IP pool.
+func initServer(rc *redis.Client) (privkey string, pubkey string) {
 	err := rc.SAdd("usedIPs", serverIP).Err()
 	check(err)
 
-	// Add the server configuration to Redis.
-	err = rc.Get(serverIP).Err()
-	if err == redis.Nil {
-		err := rc.Set(serverInterface, serverIP, 0).Err()
+	res, err := rc.HMGet(serverInterface, "ip", "pubkey", "privkey").Result()
+	check(err)
+
+	if res[0] == nil {
+		privkey, pubkey, _ = genKeys()
+		_, err = rc.HMSet(serverInterface, "ip", serverIP, "pubkey", pubkey, "privkey", privkey).Result()
 		check(err)
 	}
 
-	res, err := rc.HMGet(serverIP, "pubkey", "privkey").Result()
-	check(err)
-
-	for _, r := range res {
-		if r == nil {
-			privkey, pubkey, _ = genKeys()
-			_, err = rc.HMSet(serverIP, "pubkey", pubkey, "privkey", privkey).Result()
-			check(err)
-		}
-	}
-
-	// We're ready!
 	log.Print("-----------------------Backend ready------------------------")
 	log.Print("  PublicKey = " + pubkey)
 	log.Print("------------------------------------------------------------")

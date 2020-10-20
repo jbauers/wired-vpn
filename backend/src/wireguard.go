@@ -22,7 +22,7 @@ func genKeys() (privkey string, pubkey string, psk string) {
 	return privkey, pubkey, psk
 }
 
-func generatePeerConfig(ip string, pubkey string, psk string) (config wgtypes.PeerConfig) {
+func getPeerConfig(ip string, pubkey string, psk string) (config wgtypes.PeerConfig) {
 	key, err := wgtypes.ParseKey(pubkey)
 	check(err)
 
@@ -35,8 +35,6 @@ func generatePeerConfig(ip string, pubkey string, psk string) (config wgtypes.Pe
 		PresharedKey:      &ppsk,
 		ReplaceAllowedIPs: true,
 		AllowedIPs:        allowedIPs}
-
-	log.Print(config)
 
 	return config
 }
@@ -60,14 +58,6 @@ func updateInterface(name string, port int, privkey string, peerList []wgtypes.P
 
 	devices, err := wc.Devices()
 	check(err)
+
 	log.Print(devices)
-	for _, d := range devices {
-		log.Print(d.Name)
-		log.Print(d.Type)
-		log.Print(d.PrivateKey)
-		log.Print(d.PublicKey)
-		log.Print(d.ListenPort)
-		log.Print(d.FirewallMark)
-		log.Print(d.Peers)
-	}
 }

@@ -1,15 +1,10 @@
 -- Redis overview
 -- --------------
 --
--- uid -> ip
+-- uid -> ip, privkey, pubkey, psk
 --
---        wg1:               10.100.0.1/24
---        email@example.com: 10.100.0.2/32
---
--- ip  -> privkey, pubkey, endpoint, port, allowed_ips
---
---        10.100.0.1/24: PRIVKEY, PUBKEY, 192.168.100.1, 51820, 10.0.0.0/16
---        10.100.0.2/32: PRIVKEY, PUBKEY, 192.168.100.1, 51820, 10.0.0.0/16
+--        wg0              : 10.100.0.1/24 PRIVKEY, PUBKEY, PSK
+--        test0@example.com: 10.100.0.2/32 PRIVKEY, PUBKEY, PSK
 --
 local cjson    = require "cjson"
 local redis    = require "resty.redis"
@@ -44,10 +39,11 @@ if not res then
     view.err = "failed to subscribe "..err
 end
 
--- This is needed to render the page AFTER we got a reply from
--- the server. No idea why it has to be like this specifically,
--- but it works. TODO: Someone explain and optimize if needed.
-red:set_timeout(10)
+-- Lower timeout for the pubsub reply.
+-- FIXME: When the server is busy, these data may be skipped as
+-- the reply is too late. The HMGet still works, but the server
+-- metadata may be missing. Starts at ~500 clients (localhost).
+red:set_timeout(100)
 for i = 1, 2 do
     local res, err = red:read_reply()
     if not res then
@@ -71,21 +67,15 @@ if not res then
     view.err = "failed to subscribe "..err
 end
 
--- We can now fetch the data from Redis. We need our IP first,
--- which is the key to our hash map with our WireGuard keys.
-local ip, err = red:get(view.uid)
-if not ip then
-    view.err = "failed to get " ..view.uid..": "..err
-end
-view.ip = ip
-
-local res, err = red:hmget(ip, "privkey", "pubkey", "psk")
+-- We can now fetch the data from Redis.
+local res, err = red:hmget(view.uid, "ip", "privkey", "pubkey", "psk")
 if not res then
     view.err = "failed to HMGet: "..err
 end
-view.privkey = res[1]
-view.pubkey  = res[2]
-view.psk     = res[3]
+view.ip      = res[1]
+view.privkey = res[2]
+view.pubkey  = res[3]
+view.psk     = res[4]
 
 -- Then we can terminate the Redis connection and render the page.
 redis:close()
