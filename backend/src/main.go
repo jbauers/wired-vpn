@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"strconv"
-//	"time"
+	"time"
 )
 
 var serverInterface = os.Getenv("WG_SERVER_INTERFACE")
@@ -24,21 +24,17 @@ func check(e error) {
 }
 
 func main() {
-	rc := redisClient()
-	serverPrivkey, serverPubkey := initServer(rc)
-
-	serverPort, err := strconv.Atoi(os.Getenv("WG_SERVER_PORT"))
-	check(err)
-
-	pubsub := rc.Subscribe("clients")
-	pubsub.Receive()
-
-	// TODO: Move.
 	type serverInfo struct {
 		Pubkey   string
 		Endpoint string
 		Port     int
 	}
+
+	serverPort, err := strconv.Atoi(os.Getenv("WG_SERVER_PORT"))
+	check(err)
+
+	rc := redisClient()
+	serverPrivkey, serverPubkey := initServer(rc)
 
 	info := serverInfo{
 		Pubkey:   serverPubkey,
@@ -47,23 +43,25 @@ func main() {
 	}
 
 	jsonData, err := json.Marshal(info)
+	check(err)
 
-	// go func() {
-	// 	for true {
-	// 		time.Sleep(10 * time.Second)
-	// 		peerList := getPeerList()
-	// 		updateInterface(serverInterface, serverPort, serverPrivkey, peerList)
-	// 	}
-	// }()
+	go func() {
+		for true {
+			time.Sleep(10 * time.Second)
+			peerList := getPeerList(rc)
+			updateInterface(serverInterface, serverPort, serverPrivkey, peerList)
+		}
+	}()
+
+	pubsub := rc.Subscribe("clients")
+	pubsub.Receive()
 
 	ch := pubsub.Channel()
 	for msg := range ch {
-		_ = handleClient(msg.Payload, rc)
-		err := rc.Publish(msg.Payload, jsonData).Err()
+		err := handleClient(msg.Payload, rc)
 		check(err)
 
-		peerList := getPeerList(rc)
-		updateInterface(serverInterface, serverPort, serverPrivkey, peerList)
-
+		err = rc.Publish(msg.Payload, jsonData).Err()
+		check(err)
 	}
 }

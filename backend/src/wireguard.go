@@ -51,13 +51,8 @@ func updateInterface(name string, port int, privkey string, peerList []wgtypes.P
 		ReplacePeers: true,
 		Peers:        peerList}
 
-	log.Print(peerList)
-
 	err = wc.ConfigureDevice(name, config)
 	check(err)
 
-	devices, err := wc.Devices()
-	check(err)
-
-	log.Print(devices)
+	log.Print("UPDATED: " + name)
 }

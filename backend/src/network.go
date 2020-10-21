@@ -13,7 +13,6 @@ func incrementIP(currIP string) (newIP string) {
 			break
 		}
 	}
-
 	return ip.String()
 }
 
@@ -23,7 +22,6 @@ func stringInSlice(s string, list []string) bool {
 			return true
 		}
 	}
-
 	return false
 }
 
