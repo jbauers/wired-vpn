@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux \
 FROM alpine
 RUN apk add --no-cache bash
 
-COPY entrypoint.sh wireguard.env /
+COPY entrypoint.sh /
 ENTRYPOINT /entrypoint.sh
 
 COPY --from=builder /go/main /opt/backend

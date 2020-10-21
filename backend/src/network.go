@@ -4,6 +4,7 @@ import (
 	"net"
 )
 
+// FIXME: Filter out broadcast, ensure within CIDR.
 func incrementIP(currIP string) (newIP string) {
 	ip := net.ParseIP(currIP)
 	for i := len(ip) - 1; i >= 0; i-- {
