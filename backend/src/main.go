@@ -13,9 +13,7 @@ var serverIP = os.Getenv("WG_SERVER_IP")
 var serverEndpoint = os.Getenv("WG_SERVER_ENDPOINT")
 
 // Expiry of Redis keys for WireGuard key rotation.
-// FIXME: It is probably better to periodically clean up ourselves,
-// as we need to delete both the uid and the usedIPs entry.
-// var keyTTL = time.Duration(60 * time.Second)
+var keyTTL = time.Duration(30 * time.Second)
 
 func check(e error) {
 	if e != nil {

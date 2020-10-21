@@ -33,7 +33,9 @@ func initServer(rc *redis.Client) (privkey string, pubkey string) {
 	}
 
 	log.Print("-----------------------Backend ready------------------------")
-	log.Print("  PublicKey = " + pubkey)
+	log.Print("  Interface  = " + serverInterface)
+	log.Print("  Private IP = " + serverIP)
+	log.Print("  PublicKey  = " + pubkey)
 	log.Print("------------------------------------------------------------")
 
 	return privkey, pubkey
@@ -60,56 +62,58 @@ func handleClient(uid string, rc *redis.Client) (error) {
 	user, err := rc.HMGet(uid, "ip", "pubkey", "privkey", "psk").Result()
 	check(err)
 
-	ip := ""
-	pubkey := ""
-	privkey := ""
-	psk := ""
-
 	if user[0] == nil {
-		privkey, pubkey, psk = genKeys()
-		ip = assignIP(rc)
+		privkey, pubkey, psk := genKeys()
+		ip := assignIP(rc)
 
 		_, err = rc.HMSet(uid, "ip", ip, "pubkey", pubkey, "privkey", privkey, "psk", psk).Result()
 		check(err)
 
 		// Add ip, pubkey and psk as base64 encoded string to Redis, so
 		// we can get all in one go when updating the interface.
-		s := ip + " " + pubkey + " " + psk
+		s := ip + " " + pubkey + " " + psk + " " + uid
 		b64 := base64.StdEncoding.EncodeToString([]byte(s))
 
 		err = rc.SAdd("users", b64).Err()
 		check(err)
 
+		err = rc.Expire(uid, keyTTL).Err()
+		check(err)
+
 		log.Print("ADDED: " + uid + " - " + ip + " - " + pubkey)
 	} else {
-		for i, r := range user {
-			if i == 0 {
-				ip = r.(string)
-			}
-			if i == 1 {
-				pubkey = r.(string)
-			}
-			if i == 3 {
-				psk = r.(string)
-			}
-		}
+		ip := user[0].(string)
+		pubkey := user[1].(string)
 		log.Print("EXISTS: " + uid + " - " + ip + " - " + pubkey)
 	}
 	return nil
 }
 
 func getPeerList(rc *redis.Client) (peerList []wgtypes.PeerConfig) {
-	res, err := rc.SMembers("users").Result()
+	users, err := rc.SMembers("users").Result()
 	check(err)
 
-	for _, b64 := range res {
+	keys, err := rc.Keys("*@*").Result()
+	check(err)
+
+	for _, b64 := range users {
 		if b64 == "" {
 			log.Print("No peers!")
 		} else {
 			decoded, _ := base64.StdEncoding.DecodeString(b64)
 			s := strings.Split(string(decoded), " ")
-			config := getPeerConfig(s[0], s[1], s[2])
-			peerList = append(peerList, config)
+			if stringInSlice(s[3], keys) {
+				config := getPeerConfig(s[0], s[1], s[2])
+				peerList = append(peerList, config)
+				log.Print("KEEP: " + s[3] + " - " + s[0])
+			} else {
+				err = rc.SRem("users", b64).Err()
+				check(err)
+
+				err = rc.SRem("usedIPs", s[0]).Err()
+				check(err)
+				log.Print("REMOVED: " + s[3] + " - " + s[0])
+			}
 		}
 	}
 
