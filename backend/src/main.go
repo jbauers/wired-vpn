@@ -12,8 +12,16 @@ var serverCIDR = os.Getenv("WG_SERVER_CIDR")
 var serverIP = os.Getenv("WG_SERVER_IP")
 var serverEndpoint = os.Getenv("WG_SERVER_ENDPOINT")
 
-// Expiry of Redis keys for WireGuard key rotation.
-var keyTTL = time.Duration(30 * time.Second)
+// Expiry of Redis keys for WireGuard key rotation. We expire the "uid"
+// key after the keyTTL value. Upon interface update, when the "uid"
+// is missing, but present as part of the "users" SMEMBERS, we will
+// free up the IP from "usedIPs" and remove the stale config.
+var keyTTL = time.Duration(20 * time.Second)
+
+// If a request comes in and the TTL for its "uid" key is less than this
+// minTTL value, the WireGuard keys will be rotated. If no request comes
+// in until the key is expired, it will be removed (as described above).
+var minTTL = float64(10)
 
 func check(e error) {
 	if e != nil {

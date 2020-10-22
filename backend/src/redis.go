@@ -45,11 +45,9 @@ func assignIP(rc *redis.Client) (ip string) {
 	res, err := rc.SMembers("usedIPs").Result()
 	check(err)
 
-	for _, r := range res {
-		ip = incrementIP(r)
-		for stringInSlice(ip, res) {
-			ip = incrementIP(ip)
-		}
+	ip = serverIP
+	for stringInSlice(ip, res) {
+		ip = incrementIP(ip)
 	}
 
 	err = rc.SAdd("usedIPs", ip).Err()
@@ -62,7 +60,27 @@ func handleClient(uid string, rc *redis.Client) (error) {
 	user, err := rc.HMGet(uid, "ip", "pubkey", "privkey", "psk").Result()
 	check(err)
 
-	if user[0] == nil {
+	ttl, err := rc.TTL(uid).Result()
+	check(err)
+
+	if ttl.Seconds() < minTTL || user[0] == nil {
+		if user[0] != nil {
+			old_ip := user[0].(string)
+			old_pubkey := user[1].(string)
+			old_psk := user[3].(string)
+
+			ref := old_ip + " " + old_pubkey + " " + old_psk + " " + uid
+			b64 := base64.StdEncoding.EncodeToString([]byte(ref))
+
+			err = rc.SRem("users", b64).Err()
+			check(err)
+
+			err = rc.SRem("usedIPs", old_ip).Err()
+			check(err)
+
+			log.Print("ROTATED: " + uid + " - " + old_ip + " - " + old_pubkey)
+		}
+
 		privkey, pubkey, psk := genKeys()
 		ip := assignIP(rc)
 
@@ -84,6 +102,7 @@ func handleClient(uid string, rc *redis.Client) (error) {
 	} else {
 		ip := user[0].(string)
 		pubkey := user[1].(string)
+
 		log.Print("EXISTS: " + uid + " - " + ip + " - " + pubkey)
 	}
 	return nil
