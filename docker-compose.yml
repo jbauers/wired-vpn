@@ -4,7 +4,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "80:8080"
+      - 80:8080
     depends_on:
       - backend
     networks:
@@ -16,6 +16,8 @@ services:
 
   backend:
     build: ./backend
+    ports:
+      - ${WG_SERVER_PORT}:${WG_SERVER_PORT}/udp
     cap_add:
       - NET_ADMIN
     depends_on:
@@ -31,7 +33,7 @@ services:
   redis:
     image: "redis:alpine"
     expose:
-      - "6379"
+      - 6379
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - /data
