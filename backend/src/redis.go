@@ -56,7 +56,7 @@ func assignIP(rc *redis.Client) (ip string) {
 	return ip
 }
 
-func handleClient(uid string, rc *redis.Client) (error) {
+func handleClient(uid string, serverInterface string, serverPort int, serverPrivkey string, rc *redis.Client) (error) {
 	user, err := rc.HMGet(uid, "ip", "pubkey", "privkey", "psk").Result()
 	check(err)
 
@@ -64,6 +64,8 @@ func handleClient(uid string, rc *redis.Client) (error) {
 	check(err)
 
 	if ttl.Seconds() < minTTL || user[0] == nil {
+		var peerList []wgtypes.PeerConfig
+
 		if user[0] != nil {
 			old_ip := user[0].(string)
 			old_pubkey := user[1].(string)
@@ -77,6 +79,9 @@ func handleClient(uid string, rc *redis.Client) (error) {
 
 			err = rc.SRem("usedIPs", old_ip).Err()
 			check(err)
+
+			old_config := getPeerConfig(old_ip, old_pubkey, old_psk, true)
+			peerList = append(peerList, old_config)
 
 			log.Print("ROTATED: " + uid + " - " + old_ip + " - " + old_pubkey)
 		}
@@ -97,6 +102,10 @@ func handleClient(uid string, rc *redis.Client) (error) {
 
 		err = rc.Expire(uid, keyTTL).Err()
 		check(err)
+
+		config := getPeerConfig(ip, pubkey, psk, false)
+		peerList = append(peerList, config)
+		updateInterface(serverInterface, serverPort, serverPrivkey, peerList)
 
 		log.Print("ADDED: " + uid + " - " + ip + " - " + pubkey)
 	} else {
@@ -121,17 +130,23 @@ func getPeerList(rc *redis.Client) (peerList []wgtypes.PeerConfig) {
 		} else {
 			decoded, _ := base64.StdEncoding.DecodeString(b64)
 			s := strings.Split(string(decoded), " ")
+
 			if stringInSlice(s[3], keys) {
-				config := getPeerConfig(s[0], s[1], s[2])
+				config := getPeerConfig(s[0], s[1], s[2], false)
 				peerList = append(peerList, config)
-				log.Print("KEEP: " + s[3] + " - " + s[0])
+
+				log.Print("KEEP: " + s[3] + " - " + s[0] + " - " + s[1])
 			} else {
+				config := getPeerConfig(s[0], s[1], s[2], true)
+				peerList = append(peerList, config)
+
 				err = rc.SRem("users", b64).Err()
 				check(err)
 
 				err = rc.SRem("usedIPs", s[0]).Err()
 				check(err)
-				log.Print("REMOVED: " + s[3] + " - " + s[0])
+
+				log.Print("REMOVED: " + s[3] + " - " + s[0] + " - " + s[1])
 			}
 		}
 	}

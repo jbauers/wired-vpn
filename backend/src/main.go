@@ -64,7 +64,7 @@ func main() {
 
 	ch := pubsub.Channel()
 	for msg := range ch {
-		err := handleClient(msg.Payload, rc)
+		err := handleClient(msg.Payload, serverInterface, serverPort, serverPrivkey, rc)
 		check(err)
 
 		err = rc.Publish(msg.Payload, jsonData).Err()
