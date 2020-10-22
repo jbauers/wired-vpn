@@ -1,0 +1,4 @@
+#ZONE       TYPE
+fw          firewall
+net         ipv4
+vpn         ipv4

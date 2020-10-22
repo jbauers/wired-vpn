@@ -9,9 +9,10 @@ RUN CGO_ENABLED=0 GOOS=linux \
 
 ##########
 FROM alpine
-RUN apk add --no-cache bash
+RUN apk add --no-cache bash shorewall
 
 COPY entrypoint.sh /
 ENTRYPOINT /entrypoint.sh
 
+COPY rootfs/ /
 COPY --from=builder /go/main /opt/backend
