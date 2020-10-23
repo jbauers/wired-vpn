@@ -1,9 +1,13 @@
 FROM golang as builder
 
-RUN go get github.com/go-redis/redis
-RUN go get golang.zx2c4.com/wireguard/wgctrl
+WORKDIR /tmp/backend
 
-COPY src .
+RUN go mod init backend \
+ && go get github.com/go-redis/redis/v8 \
+ && go get golang.zx2c4.com/wireguard/wgctrl
+
+COPY src /tmp/backend
+
 RUN CGO_ENABLED=0 GOOS=linux \
     go build *.go
 
@@ -15,4 +19,4 @@ COPY entrypoint.sh /
 ENTRYPOINT /entrypoint.sh
 
 COPY rootfs/ /
-COPY --from=builder /go/main /opt/backend
+COPY --from=builder /tmp/backend/main /opt/backend

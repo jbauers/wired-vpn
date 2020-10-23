@@ -28,7 +28,12 @@ func initServer(rc *redis.Client) (privkey string, pubkey string) {
 
 	if res[0] == nil {
 		privkey, pubkey, _ = genKeys()
-		_, err = rc.HMSet(serverInterface, "ip", serverIP, "pubkey", pubkey, "privkey", privkey).Result()
+		data := map[string]interface{}{
+			"ip": serverIP,
+			"pubkey": pubkey,
+			"privkey": privkey,
+		}
+		_, err = rc.HMSet(serverInterface, data).Result()
 		check(err)
 	}
 
@@ -89,7 +94,13 @@ func handleClient(uid string, serverInterface string, serverPort int, serverPriv
 		privkey, pubkey, psk := genKeys()
 		ip := assignIP(rc)
 
-		_, err = rc.HMSet(uid, "ip", ip, "pubkey", pubkey, "privkey", privkey, "psk", psk).Result()
+		data := map[string]interface{}{
+			"ip": ip,
+			"pubkey": pubkey,
+			"privkey": privkey,
+			"psk": psk,
+		}
+		_, err = rc.HMSet(uid, data).Result()
 		check(err)
 
 		// Add ip, pubkey and psk as base64 encoded string to Redis, so
