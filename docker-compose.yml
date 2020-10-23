@@ -13,6 +13,7 @@ services:
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
       - EMAIL_DOMAIN=${EMAIL_DOMAIN}
+      - HTTP_SERVER_NAME=${HTTP_SERVER_NAME}
 
   backend:
     build: ./backend

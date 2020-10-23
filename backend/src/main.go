@@ -16,12 +16,12 @@ var serverEndpoint = os.Getenv("WG_SERVER_ENDPOINT")
 // key after the keyTTL value. Upon interface update, when the "uid"
 // is missing, but present as part of the "users" SMEMBERS, we will
 // free up the IP from "usedIPs" and remove the stale config.
-var keyTTL = time.Duration(20 * time.Second)
+var keyTTL = time.Duration(600 * time.Second)
 
 // If a request comes in and the TTL for its "uid" key is less than this
 // minTTL value, the WireGuard keys will be rotated. If no request comes
 // in until the key is expired, it will be removed (as described above).
-var minTTL = float64(10)
+var minTTL = float64(60)
 
 func check(e error) {
 	if e != nil {

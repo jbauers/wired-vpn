@@ -1,3 +1,2 @@
-#ACTION         SOURCE              DEST
-SNAT(detect)    192.168.1.0/24      eth0
-SNAT(detect)    10.100.0.0/16       eth0
+#ACTION               SOURCE              DEST
+MASQUERADE            wg0                 eth0

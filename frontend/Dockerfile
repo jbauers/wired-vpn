@@ -8,8 +8,11 @@ RUN luarocks install lua-resty-http \
  && luarocks install lua-resty-openidc \
  && luarocks install lua-resty-template
 
+COPY entrypoint.sh /
+ENTRYPOINT /entrypoint.sh
+
 COPY nginx.conf /usr/local/openresty/nginx/conf/
 
 COPY templates /opt/templates
 COPY css /opt/css
-COPY src/ /opt/
+COPY src /opt/
