@@ -1,5 +1,5 @@
 local opts = {
-    discovery     = "https://accounts.google.com/.well-known/openid-configuration",
+    discovery     = os.getenv('OIDC_DISCOVERY_URL'),
     client_id     = os.getenv('OIDC_CLIENT_ID'),
     client_secret = os.getenv('OIDC_CLIENT_SECRET'),
 
