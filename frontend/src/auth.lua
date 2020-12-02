@@ -2,9 +2,21 @@ local opts = {
     discovery     = os.getenv('OIDC_DISCOVERY_URL'),
     client_id     = os.getenv('OIDC_CLIENT_ID'),
     client_secret = os.getenv('OIDC_CLIENT_SECRET'),
+    scope = "openid email profile groups",
 
     redirect_uri = ngx.var.scheme.."://"..ngx.var.server_name.."/redirect_uri",
     token_signing_alg_values_expected = "RS256",
+}
+
+-- Map OIDC groups to WireGuard interfaces. The backend will manage the peers
+-- for each interface, and we can then apply different firewall rules per
+-- interface using Shorewall.
+-- FIXME:
+--   - Implement multiple interfaces in the backend
+--   - Add working Shorewall firewall configs
+--   - Tie things together with a "high-level" config
+local groups = {
+    Engineering = "wg0",
 }
 
 local res, err = require("resty.openidc").authenticate(opts)
@@ -28,3 +40,14 @@ if domainPart ~= os.getenv('EMAIL_DOMAIN') then
 end
 
 ngx.req.set_header('Authenticated-User', res.user.email)
+
+for index, group in pairs(res.user.groups) do
+    if not groups[group] then
+        ngx.log(ngx.ALERT, 'DENIED: '..group)
+    else
+        ngx.log(ngx.ALERT, 'GRANTED: '..group..' - '..groups[group])
+	-- FIXME: Meh.
+        ngx.req.set_header('Authenticated-User-Interface', groups[group])
+        return
+    end
+end
