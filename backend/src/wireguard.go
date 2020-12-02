@@ -40,20 +40,20 @@ func getPeerConfig(ip string, pubkey string, psk string, toRemove bool) (config 
 	return config
 }
 
-func updateInterface(name string, port int, privkey string, peerList []wgtypes.PeerConfig) {
+func updateInterface(server Peer, peerList []wgtypes.PeerConfig) {
 	wc, err := wgctrl.New()
 	check(err)
 
-	key, err := wgtypes.ParseKey(privkey)
+	key, err := wgtypes.ParseKey(server.PrivateKey)
 	check(err)
 
 	config := wgtypes.Config{PrivateKey: &key,
-		ListenPort:   &port,
+		ListenPort:   &server.Port,
 		ReplacePeers: false,
 		Peers:        peerList}
 
-	err = wc.ConfigureDevice(name, config)
+	err = wc.ConfigureDevice(server.Interface, config)
 	check(err)
 
-	log.Print("UPDATED: " + name)
+	log.Print("UPDATED: " + server.Interface)
 }

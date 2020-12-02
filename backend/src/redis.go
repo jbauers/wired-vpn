@@ -29,8 +29,8 @@ func initServer(rc *redis.Client) (privkey string, pubkey string) {
 	if res[0] == nil {
 		privkey, pubkey, _ = genKeys()
 		data := map[string]interface{}{
-			"ip": serverIP,
-			"pubkey": pubkey,
+			"ip":      serverIP,
+			"pubkey":  pubkey,
 			"privkey": privkey,
 		}
 		_, err = rc.HMSet(serverInterface, data).Result()
@@ -61,12 +61,18 @@ func assignIP(rc *redis.Client) (ip string) {
 	return ip
 }
 
-func handleClient(uid string, serverInterface string, serverPort int, serverPrivkey string, rc *redis.Client) (error) {
+func handleClient(uid string, server Peer) (error, string, string, string, string) {
+	rc := server.RedisClient
 	user, err := rc.HMGet(uid, "ip", "pubkey", "privkey", "psk").Result()
 	check(err)
 
 	ttl, err := rc.TTL(uid).Result()
 	check(err)
+
+	var ip string
+	var pubkey string
+	var privkey string
+	var psk string
 
 	if ttl.Seconds() < minTTL || user[0] == nil {
 		var peerList []wgtypes.PeerConfig
@@ -91,14 +97,14 @@ func handleClient(uid string, serverInterface string, serverPort int, serverPriv
 			log.Print("ROTATED: " + uid + " - " + old_ip + " - " + old_pubkey)
 		}
 
-		privkey, pubkey, psk := genKeys()
-		ip := assignIP(rc)
+		privkey, pubkey, psk = genKeys()
+		ip = assignIP(rc)
 
 		data := map[string]interface{}{
-			"ip": ip,
-			"pubkey": pubkey,
+			"ip":      ip,
+			"pubkey":  pubkey,
 			"privkey": privkey,
-			"psk": psk,
+			"psk":     psk,
 		}
 		_, err = rc.HMSet(uid, data).Result()
 		check(err)
@@ -116,16 +122,18 @@ func handleClient(uid string, serverInterface string, serverPort int, serverPriv
 
 		config := getPeerConfig(ip, pubkey, psk, false)
 		peerList = append(peerList, config)
-		updateInterface(serverInterface, serverPort, serverPrivkey, peerList)
+		updateInterface(server, peerList)
 
 		log.Print("ADDED: " + uid + " - " + ip + " - " + pubkey)
 	} else {
-		ip := user[0].(string)
-		pubkey := user[1].(string)
+		ip = user[0].(string)
+		pubkey = user[1].(string)
+		privkey = user[2].(string)
+		psk = user[3].(string)
 
 		log.Print("EXISTS: " + uid + " - " + ip + " - " + pubkey)
 	}
-	return nil
+	return nil, ip, pubkey, privkey, psk
 }
 
 func getPeerList(rc *redis.Client) (peerList []wgtypes.PeerConfig) {

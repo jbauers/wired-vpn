@@ -1,10 +1,14 @@
 package main
 
 import (
-	"encoding/json"
+	"html/template"
+	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/go-redis/redis"
 )
 
 var serverInterface = os.Getenv("WG_SERVER_INTERFACE")
@@ -23,51 +27,77 @@ var keyTTL = time.Duration(600 * time.Second)
 // in until the key is expired, it will be removed (as described above).
 var minTTL = float64(60)
 
+type Peer struct {
+	Interface   string
+	Endpoint    string
+	Port        int
+	PublicKey   string
+	PrivateKey  string
+	PSK         string
+	IP          string
+	AllowedIPs  string
+	DNS         string
+	Access      bool
+	RedisClient *redis.Client
+}
+
 func check(e error) {
 	if e != nil {
 		panic(e)
 	}
 }
 
-func main() {
-	type serverInfo struct {
-		Pubkey   string
-		Endpoint string
-		Port     int
+func (server Peer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	tmpl := template.Must(template.ParseFiles("/var/www/templates/wireguard.html"))
+	w.Header().Add("Content-Type", "text/html")
+	var data Peer
+	for k, v := range r.Header {
+		if k == "Authenticated-User" && v[0] != "" {
+			err, clientIP, _, clientPrivateKey, clientPSK := handleClient(v[0], server)
+			check(err)
+			data = Peer{
+				Endpoint:   server.Endpoint,
+				Port:       server.Port,
+				PublicKey:  server.PublicKey,
+				PrivateKey: clientPrivateKey,
+				PSK:        clientPSK,
+				IP:         clientIP,
+				AllowedIPs: "10.0.0.0/8", // FIXME
+				DNS:        "1.2.3.4",    // FIXME
+				Access:     true,
+			}
+			break
+		} else {
+			data = Peer{Access: false}
+		}
 	}
+	tmpl.Execute(w, data)
+}
 
+func main() {
 	serverPort, err := strconv.Atoi(os.Getenv("WG_SERVER_PORT"))
 	check(err)
 
 	rc := redisClient()
-	serverPrivkey, serverPubkey := initServer(rc)
+	serverPrivateKey, serverPublicKey := initServer(rc)
 
-	info := serverInfo{
-		Pubkey:   serverPubkey,
-		Endpoint: serverEndpoint,
-		Port:     serverPort,
+	server := Peer{
+		Interface:   serverInterface,
+		Endpoint:    serverEndpoint,
+		Port:        serverPort,
+		PublicKey:   serverPublicKey,
+		PrivateKey:  serverPrivateKey,
+		RedisClient: rc,
 	}
 
-	jsonData, err := json.Marshal(info)
-	check(err)
+	http.Handle("/", server)
+	log.Fatal(http.ListenAndServe(":9000", nil))
 
 	go func() {
 		for true {
 			time.Sleep(10 * time.Second)
 			peerList := getPeerList(rc)
-			updateInterface(serverInterface, serverPort, serverPrivkey, peerList)
+			updateInterface(server, peerList)
 		}
 	}()
-
-	pubsub := rc.Subscribe("clients")
-	pubsub.Receive()
-
-	ch := pubsub.Channel()
-	for msg := range ch {
-		err := handleClient(msg.Payload, serverInterface, serverPort, serverPrivkey, rc)
-		check(err)
-
-		err = rc.Publish(msg.Payload, jsonData).Err()
-		check(err)
-	}
 }

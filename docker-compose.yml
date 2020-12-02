@@ -8,7 +8,7 @@ services:
     depends_on:
       - backend
     networks:
-      - redis
+      - web
     environment:
       - OIDC_DISCOVERY_URL=${OIDC_DISCOVERY_URL}
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
@@ -26,6 +26,7 @@ services:
       - redis
     networks:
       - redis
+      - web
     environment:
       - WG_SERVER_INTERFACE=${WG_SERVER_INTERFACE}
       - WG_SERVER_CIDR=${WG_SERVER_CIDR}
@@ -44,4 +45,6 @@ services:
 
 networks:
   redis:
+    driver: bridge
+  web:
     driver: bridge
