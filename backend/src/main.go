@@ -50,12 +50,12 @@ func check(e error) {
 func (server Peer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	tmpl := template.Must(template.ParseFiles("/var/www/templates/wireguard.html"))
 	w.Header().Add("Content-Type", "text/html")
-	var data Peer
+	var client Peer
 	for k, v := range r.Header {
 		if k == "Authenticated-User" && v[0] != "" {
 			err, clientIP, _, clientPrivateKey, clientPSK := handleClient(v[0], server)
 			check(err)
-			data = Peer{
+			client = Peer{
 				Endpoint:   server.Endpoint,
 				Port:       server.Port,
 				PublicKey:  server.PublicKey,
@@ -68,10 +68,10 @@ func (server Peer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			break
 		} else {
-			data = Peer{Access: false}
+			client = Peer{Access: false}
 		}
 	}
-	tmpl.Execute(w, data)
+	tmpl.Execute(w, client)
 }
 
 func main() {
@@ -90,14 +90,25 @@ func main() {
 		RedisClient: rc,
 	}
 
-	http.Handle("/", server)
-	log.Fatal(http.ListenAndServe(":9000", nil))
+	log.Print("---------------------- Backend ready -----------------------")
+	log.Print(" Interface:  " + server.Interface)
+	log.Print(" Network:    " + serverCIDR)
+	log.Print(" Endpoint:   " + server.Endpoint)
+	log.Print(" Port:       " + os.Getenv("WG_SERVER_PORT")) // Type string
+	log.Print(" PublicKey:  " + server.PublicKey)
+	log.Print("------------------------------------------------------------")
 
 	go func() {
 		for true {
 			time.Sleep(10 * time.Second)
+
 			peerList := getPeerList(rc)
 			updateInterface(server, peerList)
+
+			log.Printf("Updated WireGuard interface %s", server.Interface)
 		}
 	}()
+
+	http.Handle("/", server)
+	log.Fatal(http.ListenAndServe(":9000", nil))
 }

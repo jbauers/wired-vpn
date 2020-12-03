@@ -37,12 +37,6 @@ func initServer(rc *redis.Client) (privkey string, pubkey string) {
 		check(err)
 	}
 
-	log.Print("-----------------------Backend ready------------------------")
-	log.Print("  Interface  = " + serverInterface)
-	log.Print("  Private IP = " + serverIP)
-	log.Print("  PublicKey  = " + pubkey)
-	log.Print("------------------------------------------------------------")
-
 	return privkey, pubkey
 }
 
@@ -50,10 +44,7 @@ func assignIP(rc *redis.Client) (ip string) {
 	res, err := rc.SMembers("usedIPs").Result()
 	check(err)
 
-	ip = serverIP
-	for stringInSlice(ip, res) {
-		ip = incrementIP(ip)
-	}
+	ip = getAvailableIP(res)
 
 	err = rc.SAdd("usedIPs", ip).Err()
 	check(err)
@@ -61,18 +52,13 @@ func assignIP(rc *redis.Client) (ip string) {
 	return ip
 }
 
-func handleClient(uid string, server Peer) (error, string, string, string, string) {
+func handleClient(uid string, server Peer) (err error, ip string, pubkey string, privkey string, psk string) {
 	rc := server.RedisClient
 	user, err := rc.HMGet(uid, "ip", "pubkey", "privkey", "psk").Result()
 	check(err)
 
 	ttl, err := rc.TTL(uid).Result()
 	check(err)
-
-	var ip string
-	var pubkey string
-	var privkey string
-	var psk string
 
 	if ttl.Seconds() < minTTL || user[0] == nil {
 		var peerList []wgtypes.PeerConfig
@@ -94,7 +80,7 @@ func handleClient(uid string, server Peer) (error, string, string, string, strin
 			old_config := getPeerConfig(old_ip, old_pubkey, old_psk, true)
 			peerList = append(peerList, old_config)
 
-			log.Print("ROTATED: " + uid + " - " + old_ip + " - " + old_pubkey)
+			log.Printf("Rotated WireGuard peer %s %s %s", uid, old_ip, old_pubkey)
 		}
 
 		privkey, pubkey, psk = genKeys()
@@ -122,16 +108,19 @@ func handleClient(uid string, server Peer) (error, string, string, string, strin
 
 		config := getPeerConfig(ip, pubkey, psk, false)
 		peerList = append(peerList, config)
-		updateInterface(server, peerList)
 
-		log.Print("ADDED: " + uid + " - " + ip + " - " + pubkey)
+		err = updateInterface(server, peerList)
+		check(err)
+
+		log.Printf("Added WireGuard peer %s %s %s", uid, ip, pubkey)
+		log.Printf("Updated WireGuard interface %s", server.Interface)
 	} else {
 		ip = user[0].(string)
 		pubkey = user[1].(string)
 		privkey = user[2].(string)
 		psk = user[3].(string)
 
-		log.Print("EXISTS: " + uid + " - " + ip + " - " + pubkey)
+		log.Printf("Found existing WireGuard peer %s %s %s", uid, ip, pubkey)
 	}
 	return nil, ip, pubkey, privkey, psk
 }
@@ -154,7 +143,7 @@ func getPeerList(rc *redis.Client) (peerList []wgtypes.PeerConfig) {
 				config := getPeerConfig(s[0], s[1], s[2], false)
 				peerList = append(peerList, config)
 
-				log.Print("KEEP: " + s[3] + " - " + s[0] + " - " + s[1])
+				log.Printf("Keeping WireGuard peer %s %s %s", s[3], s[0], s[1])
 			} else {
 				config := getPeerConfig(s[0], s[1], s[2], true)
 				peerList = append(peerList, config)
@@ -165,7 +154,7 @@ func getPeerList(rc *redis.Client) (peerList []wgtypes.PeerConfig) {
 				err = rc.SRem("usedIPs", s[0]).Err()
 				check(err)
 
-				log.Print("REMOVED: " + s[3] + " - " + s[0] + " - " + s[1])
+				log.Printf("Removing WireGuard peer %s %s %s", s[3], s[0], s[1])
 			}
 		}
 	}

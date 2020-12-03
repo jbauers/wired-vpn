@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"net"
 
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
@@ -40,7 +40,7 @@ func getPeerConfig(ip string, pubkey string, psk string, toRemove bool) (config 
 	return config
 }
 
-func updateInterface(server Peer, peerList []wgtypes.PeerConfig) {
+func updateInterface(server Peer, peerList []wgtypes.PeerConfig) error {
 	wc, err := wgctrl.New()
 	check(err)
 
@@ -53,7 +53,47 @@ func updateInterface(server Peer, peerList []wgtypes.PeerConfig) {
 		Peers:        peerList}
 
 	err = wc.ConfigureDevice(server.Interface, config)
+	return err
+}
+
+func getAllowedIP(ip string) []net.IPNet {
+	// The allowed IPv4 may only be a /32.
+	_, ipnet, err := net.ParseCIDR("0.0.0.0/32")
 	check(err)
 
-	log.Print("UPDATED: " + server.Interface)
+	network := *ipnet
+	network.IP = net.ParseIP(ip)
+
+	return []net.IPNet{network}
 }
+
+
+func getAvailableIP(ips []string) (ip string) {
+	ip = serverIP
+	for stringInSlice(ip, ips) {
+		ip = iterIP(ip)
+	}
+	return ip
+}
+
+// FIXME: Filter out broadcast, ensure within CIDR.
+func iterIP(currIP string) (newIP string) {
+	ip := net.ParseIP(currIP)
+	for i := len(ip) - 1; i >= 0; i-- {
+		ip[i]++
+		if ip[i] > 0 {
+			break
+		}
+	}
+	return ip.String()
+}
+
+func stringInSlice(s string, list []string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
