@@ -22,12 +22,12 @@ var serverAllowedIPs = os.Getenv("WG_ALLOWED_IPS")
 // key after the keyTTL value. Upon interface update, when the "uid"
 // is missing, but present as part of the "users" SMEMBERS, we will
 // free up the IP from "usedIPs" and remove the stale config.
-var keyTTL = time.Duration(600 * time.Second)
+var keyTTL = time.Duration(30 * time.Second)
 
 // If a request comes in and the TTL for its "uid" key is less than this
 // minTTL value, the WireGuard keys will be rotated. If no request comes
 // in until the key is expired, it will be removed (as described above).
-var minTTL = float64(60)
+var minTTL = float64(10)
 
 type Peer struct {
 	Interface   string
@@ -41,7 +41,7 @@ type Peer struct {
 	DNS         string
 	Access      bool
 	Error       string
-	RedisClient *redis.Client
+	RedisClient *redis.Client // Meh.
 }
 
 func check(e error) {
@@ -50,13 +50,25 @@ func check(e error) {
 	}
 }
 
+func stringInSlice(s string, list []string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
 func (server Peer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	tmpl := template.Must(template.ParseFiles("/var/www/templates/wireguard.html"))
 	w.Header().Add("Content-Type", "text/html")
+
 	var client Peer
-	for k, v := range r.Header {
-		if k == "X-Wired-User" && v[0] != "" {
-			err, clientIP, _, clientPrivateKey, clientPSK := handleClient(v[0], server)
+	for header, value := range r.Header {
+		// The frontend has done the auth and added the email address to this header.
+		// TODO: Support multiple interfaces with X-Wired-Interface.
+		if header == "X-Wired-User" && value[0] != "" {
+			err, clientIP, _, clientPrivateKey, clientPSK := handleClient(value[0], server)
 			if err != nil {
 				client = Peer{
 					Access: false,
