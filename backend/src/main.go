@@ -38,6 +38,7 @@ type Peer struct {
 	AllowedIPs  string
 	DNS         string
 	Access      bool
+	Error       string
 	RedisClient *redis.Client
 }
 
@@ -54,21 +55,30 @@ func (server Peer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for k, v := range r.Header {
 		if k == "Authenticated-User" && v[0] != "" {
 			err, clientIP, _, clientPrivateKey, clientPSK := handleClient(v[0], server)
-			check(err)
-			client = Peer{
-				Endpoint:   server.Endpoint,
-				Port:       server.Port,
-				PublicKey:  server.PublicKey,
-				PrivateKey: clientPrivateKey,
-				PSK:        clientPSK,
-				IP:         clientIP,
-				AllowedIPs: "10.0.0.0/8", // FIXME
-				DNS:        "1.2.3.4",    // FIXME
-				Access:     true,
+			if err != nil {
+				client = Peer{
+					Access: false,
+					Error:  err.Error(),
+				}
+			} else {
+				client = Peer{
+					Endpoint:   server.Endpoint,
+					Port:       server.Port,
+					PublicKey:  server.PublicKey,
+					PrivateKey: clientPrivateKey,
+					PSK:        clientPSK,
+					IP:         clientIP,
+					AllowedIPs: "10.0.0.0/8", // FIXME
+					DNS:        "1.2.3.4",    // FIXME
+					Access:     true,
+				}
 			}
 			break
 		} else {
-			client = Peer{Access: false}
+			client = Peer{
+				Access: false,
+				Error:  "Access denied.",
+			}
 		}
 	}
 	tmpl.Execute(w, client)
@@ -90,13 +100,13 @@ func main() {
 		RedisClient: rc,
 	}
 
-	log.Print("---------------------- Backend ready -----------------------")
-	log.Print(" Interface:  " + server.Interface)
-	log.Print(" Network:    " + serverCIDR)
-	log.Print(" Endpoint:   " + server.Endpoint)
-	log.Print(" Port:       " + os.Getenv("WG_SERVER_PORT")) // Type string
-	log.Print(" PublicKey:  " + server.PublicKey)
-	log.Print("------------------------------------------------------------")
+	log.Printf("---------------------- Backend ready -----------------------")
+	log.Printf(" Interface: %s", server.Interface)
+	log.Printf(" Network:   %s", serverCIDR)
+	log.Printf(" Endpoint:  %s", server.Endpoint)
+	log.Printf(" Port:      %d", server.Port)
+	log.Printf(" PublicKey: %s", server.PublicKey)
+	log.Printf("------------------------------------------------------------")
 
 	go func() {
 		for true {

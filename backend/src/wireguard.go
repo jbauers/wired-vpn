@@ -1,56 +1,60 @@
 package main
 
 import (
+	"errors"
 	"net"
 
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
-func genKeys() (privkey string, pubkey string, psk string) {
-	k, err := wgtypes.GeneratePrivateKey()
+func genKeys() (privateKey string, publicKey string, presharedKey string) {
+	keyPair, err := wgtypes.GeneratePrivateKey()
 	check(err)
 
-	sk, err := wgtypes.GenerateKey()
+	psk, err := wgtypes.GenerateKey()
 	check(err)
 
-	privkey = k.String()
-	pubkey = k.PublicKey().String()
+	privateKey = keyPair.String()
+	publicKey = keyPair.PublicKey().String()
+	presharedKey = psk.String()
 
-	psk = sk.String()
-
-	return privkey, pubkey, psk
+	return privateKey, publicKey, presharedKey
 }
 
-func getPeerConfig(ip string, pubkey string, psk string, toRemove bool) (config wgtypes.PeerConfig) {
-	key, err := wgtypes.ParseKey(pubkey)
+func getPeerConfig(ip string, publicKey string, presharedKey string, toRemove bool) (peerConfig wgtypes.PeerConfig) {
+	pub, err := wgtypes.ParseKey(publicKey)
 	check(err)
 
-	ppsk, err := wgtypes.ParseKey(psk)
+	psk, err := wgtypes.ParseKey(presharedKey)
 	check(err)
 
 	allowedIPs := getAllowedIP(ip)
 
-	config = wgtypes.PeerConfig{PublicKey: key,
+	peerConfig = wgtypes.PeerConfig{
+		PublicKey:         pub,
+		PresharedKey:      &psk,
 		Remove:            toRemove,
-		PresharedKey:      &ppsk,
+		AllowedIPs:        allowedIPs,
 		ReplaceAllowedIPs: false,
-		AllowedIPs:        allowedIPs}
+	}
 
-	return config
+	return peerConfig
 }
 
 func updateInterface(server Peer, peerList []wgtypes.PeerConfig) error {
 	wc, err := wgctrl.New()
 	check(err)
 
-	key, err := wgtypes.ParseKey(server.PrivateKey)
+	privateKey, err := wgtypes.ParseKey(server.PrivateKey)
 	check(err)
 
-	config := wgtypes.Config{PrivateKey: &key,
+	config := wgtypes.Config{
+		PrivateKey:   &privateKey,
 		ListenPort:   &server.Port,
+		Peers:        peerList,
 		ReplacePeers: false,
-		Peers:        peerList}
+	}
 
 	err = wc.ConfigureDevice(server.Interface, config)
 	return err
@@ -67,25 +71,33 @@ func getAllowedIP(ip string) []net.IPNet {
 	return []net.IPNet{network}
 }
 
+func getAvailableIP(ips []string) (string, error) {
+	ip, ipnet, err := net.ParseCIDR(serverCIDR)
+	check(err)
 
-func getAvailableIP(ips []string) (ip string) {
-	ip = serverIP
-	for stringInSlice(ip, ips) {
+	for stringInSlice(ip.String(), ips) {
 		ip = iterIP(ip)
 	}
-	return ip
+
+	if !ipnet.Contains(ip) {
+		return "", errors.New("Exhausted IP addresses!")
+	}
+
+	return ip.String(), nil
 }
 
-// FIXME: Filter out broadcast, ensure within CIDR.
-func iterIP(currIP string) (newIP string) {
-	ip := net.ParseIP(currIP)
+func iterIP(ip net.IP) net.IP {
 	for i := len(ip) - 1; i >= 0; i-- {
 		ip[i]++
+		if ip[i] == 255 {
+			ip[i-1]++
+			ip[i] = 1
+		}
 		if ip[i] > 0 {
 			break
 		}
 	}
-	return ip.String()
+	return ip
 }
 
 func stringInSlice(s string, list []string) bool {
@@ -96,4 +108,3 @@ func stringInSlice(s string, list []string) bool {
 	}
 	return false
 }
-

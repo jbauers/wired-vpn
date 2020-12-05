@@ -11,22 +11,23 @@
     <div class="container w-50">
       <h1 class="mt-4">Wired VPN</h1>
       </br>
-      <p>Below is your <a href="https://www.wireguard.com/install/">WireGuard</a> configuration file.</p>
       {{if .Access}}
-      <pre class="border border-primary rounded bg-light p-3">
-      [Interface]
-      Address = {{.IP}}
-      PrivateKey = {{.PrivateKey}}
-      DNS = {{.DNS}}
-      
-      [Peer]
-      PublicKey = {{.PublicKey}}
-      PresharedKey = {{.PSK}}
-      AllowedIPs = {{.AllowedIPs}}
-      Endpoint = {{.Endpoint}}:{{.Port}}
-      </pre>
+        <p>Below is your <a href="https://www.wireguard.com/install/">WireGuard</a> configuration file.</p>
+        <pre class="border border-primary rounded bg-light p-3">
+        [Interface]
+        Address = {{.IP}}
+        PrivateKey = {{.PrivateKey}}
+        DNS = {{.DNS}}
+
+        [Peer]
+        PublicKey = {{.PublicKey}}
+        PresharedKey = {{.PSK}}
+        AllowedIPs = {{.AllowedIPs}}
+        Endpoint = {{.Endpoint}}:{{.Port}}
+        </pre>
       {{else}}
-      <p>Error!</p>
+        <p>Error: {{.Error}}</p>
+        <p>Please contact the server administrator.</p>
       {{end}}
     </div>
   </body>

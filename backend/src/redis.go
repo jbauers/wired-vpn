@@ -19,7 +19,7 @@ func redisClient() (client *redis.Client) {
 	return client
 }
 
-func initServer(rc *redis.Client) (privkey string, pubkey string) {
+func initServer(rc *redis.Client) (privateKey string, publicKey string) {
 	err := rc.SAdd("usedIPs", serverIP).Err()
 	check(err)
 
@@ -27,32 +27,35 @@ func initServer(rc *redis.Client) (privkey string, pubkey string) {
 	check(err)
 
 	if res[0] == nil {
-		privkey, pubkey, _ = genKeys()
-		data := map[string]interface{}{
+		privateKey, publicKey, _ = genKeys()
+		peer := map[string]interface{}{
 			"ip":      serverIP,
-			"pubkey":  pubkey,
-			"privkey": privkey,
+			"pubkey":  publicKey,
+			"privkey": privateKey,
 		}
-		_, err = rc.HMSet(serverInterface, data).Result()
+		err = rc.HMSet(serverInterface, peer).Err()
 		check(err)
 	}
 
-	return privkey, pubkey
+	return privateKey, publicKey
 }
 
-func assignIP(rc *redis.Client) (ip string) {
-	res, err := rc.SMembers("usedIPs").Result()
+func assignIP(rc *redis.Client) (ip string, err error) {
+	ips, err := rc.SMembers("usedIPs").Result()
 	check(err)
 
-	ip = getAvailableIP(res)
+	ip, err = getAvailableIP(ips)
+	if err != nil {
+		return "", err
+	}
 
 	err = rc.SAdd("usedIPs", ip).Err()
 	check(err)
 
-	return ip
+	return ip, nil
 }
 
-func handleClient(uid string, server Peer) (err error, ip string, pubkey string, privkey string, psk string) {
+func handleClient(uid string, server Peer) (err error, ip string, publicKey string, privateKey string, presharedKey string) {
 	rc := server.RedisClient
 	user, err := rc.HMGet(uid, "ip", "pubkey", "privkey", "psk").Result()
 	check(err)
@@ -64,65 +67,76 @@ func handleClient(uid string, server Peer) (err error, ip string, pubkey string,
 		var peerList []wgtypes.PeerConfig
 
 		if user[0] != nil {
-			old_ip := user[0].(string)
-			old_pubkey := user[1].(string)
-			old_psk := user[3].(string)
+			staleIP := user[0].(string)
+			stalePublicKey := user[1].(string)
+			stalePresharedKey := user[3].(string)
 
-			ref := old_ip + " " + old_pubkey + " " + old_psk + " " + uid
+			ref := staleIP + " " + stalePublicKey + " " + stalePresharedKey + " " + uid
 			b64 := base64.StdEncoding.EncodeToString([]byte(ref))
 
+			// Remove stale base64 string from Redis.
 			err = rc.SRem("users", b64).Err()
 			check(err)
 
-			err = rc.SRem("usedIPs", old_ip).Err()
+			// Free up IP.
+			err = rc.SRem("usedIPs", staleIP).Err()
 			check(err)
 
-			old_config := getPeerConfig(old_ip, old_pubkey, old_psk, true)
-			peerList = append(peerList, old_config)
+			// Add stale config to peerList with toRemove set to true. We'll also add the
+			// new config to peerList, so when we update the interface at the end, we're
+			// rotating the config for this peer.
+			stalePeerConfig := getPeerConfig(staleIP, stalePublicKey, stalePresharedKey, true)
+			peerList = append(peerList, stalePeerConfig)
 
-			log.Printf("Rotated WireGuard peer %s %s %s", uid, old_ip, old_pubkey)
+			log.Printf("Rotating WireGuard peer %s %s %s", uid, staleIP, stalePublicKey)
 		}
 
-		privkey, pubkey, psk = genKeys()
-		ip = assignIP(rc)
+		privateKey, publicKey, presharedKey = genKeys()
 
-		data := map[string]interface{}{
+		ip, err = assignIP(rc)
+		if err != nil {
+			return err, "", "", "", ""
+		}
+
+		peer := map[string]interface{}{
 			"ip":      ip,
-			"pubkey":  pubkey,
-			"privkey": privkey,
-			"psk":     psk,
+			"pubkey":  publicKey,
+			"privkey": privateKey,
+			"psk":     presharedKey,
 		}
-		_, err = rc.HMSet(uid, data).Result()
+		err = rc.HMSet(uid, peer).Err()
 		check(err)
 
 		// Add ip, pubkey and psk as base64 encoded string to Redis, so
 		// we can get all in one go when updating the interface.
-		s := ip + " " + pubkey + " " + psk + " " + uid
+		s := ip + " " + publicKey + " " + presharedKey + " " + uid
 		b64 := base64.StdEncoding.EncodeToString([]byte(s))
 
 		err = rc.SAdd("users", b64).Err()
 		check(err)
 
+		// Expire the uid key in Redis. When it is found missing when
+		// getPeerList is called, the other Redis keys will be removed.
 		err = rc.Expire(uid, keyTTL).Err()
 		check(err)
 
-		config := getPeerConfig(ip, pubkey, psk, false)
-		peerList = append(peerList, config)
+		peerConfig := getPeerConfig(ip, publicKey, presharedKey, false)
+		peerList = append(peerList, peerConfig)
 
 		err = updateInterface(server, peerList)
 		check(err)
 
-		log.Printf("Added WireGuard peer %s %s %s", uid, ip, pubkey)
+		log.Printf("Added WireGuard peer %s %s %s", uid, ip, publicKey)
 		log.Printf("Updated WireGuard interface %s", server.Interface)
 	} else {
 		ip = user[0].(string)
-		pubkey = user[1].(string)
-		privkey = user[2].(string)
-		psk = user[3].(string)
+		publicKey = user[1].(string)
+		privateKey = user[2].(string)
+		presharedKey = user[3].(string)
 
-		log.Printf("Found existing WireGuard peer %s %s %s", uid, ip, pubkey)
+		log.Printf("Found existing WireGuard peer %s %s %s", uid, ip, publicKey)
 	}
-	return nil, ip, pubkey, privkey, psk
+	return nil, ip, publicKey, privateKey, presharedKey
 }
 
 func getPeerList(rc *redis.Client) (peerList []wgtypes.PeerConfig) {
@@ -139,14 +153,16 @@ func getPeerList(rc *redis.Client) (peerList []wgtypes.PeerConfig) {
 			decoded, _ := base64.StdEncoding.DecodeString(b64)
 			s := strings.Split(string(decoded), " ")
 
+			// When both the base64 string and uid key exist, we'll keep the
+			// config. When the uid key has expired, we'll remove the stale entries.
 			if stringInSlice(s[3], keys) {
-				config := getPeerConfig(s[0], s[1], s[2], false)
-				peerList = append(peerList, config)
+				peerConfig := getPeerConfig(s[0], s[1], s[2], false)
+				peerList = append(peerList, peerConfig)
 
 				log.Printf("Keeping WireGuard peer %s %s %s", s[3], s[0], s[1])
 			} else {
-				config := getPeerConfig(s[0], s[1], s[2], true)
-				peerList = append(peerList, config)
+				peerConfig := getPeerConfig(s[0], s[1], s[2], true)
+				peerList = append(peerList, peerConfig)
 
 				err = rc.SRem("users", b64).Err()
 				check(err)
