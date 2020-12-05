@@ -15,6 +15,8 @@ var serverInterface = os.Getenv("WG_SERVER_INTERFACE")
 var serverCIDR = os.Getenv("WG_SERVER_CIDR")
 var serverIP = os.Getenv("WG_SERVER_IP")
 var serverEndpoint = os.Getenv("WG_SERVER_ENDPOINT")
+var serverDNS = os.Getenv("WG_DNS")
+var serverAllowedIPs = os.Getenv("WG_ALLOWED_IPS")
 
 // Expiry of Redis keys for WireGuard key rotation. We expire the "uid"
 // key after the keyTTL value. Upon interface update, when the "uid"
@@ -53,7 +55,7 @@ func (server Peer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "text/html")
 	var client Peer
 	for k, v := range r.Header {
-		if k == "Authenticated-User" && v[0] != "" {
+		if k == "X-Wired-User" && v[0] != "" {
 			err, clientIP, _, clientPrivateKey, clientPSK := handleClient(v[0], server)
 			if err != nil {
 				client = Peer{
@@ -68,8 +70,8 @@ func (server Peer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					PrivateKey: clientPrivateKey,
 					PSK:        clientPSK,
 					IP:         clientIP,
-					AllowedIPs: "10.0.0.0/8", // FIXME
-					DNS:        "1.2.3.4",    // FIXME
+					AllowedIPs: server.AllowedIPs,
+					DNS:        server.DNS,
 					Access:     true,
 				}
 			}
@@ -97,6 +99,8 @@ func main() {
 		Port:        serverPort,
 		PublicKey:   serverPublicKey,
 		PrivateKey:  serverPrivateKey,
+		AllowedIPs:  serverAllowedIPs,
+		DNS:         serverDNS,
 		RedisClient: rc,
 	}
 

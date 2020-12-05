@@ -39,15 +39,14 @@ if domainPart ~= os.getenv('EMAIL_DOMAIN') then
     ngx.exit(ngx.HTTP_FORBIDDEN)
 end
 
-ngx.req.set_header('Authenticated-User', res.user.email)
+ngx.req.set_header('X-Wired-User', res.user.email)
 
 for index, group in pairs(res.user.groups) do
     if not groups[group] then
-        ngx.log(ngx.ALERT, 'DENIED: '..group)
+        ngx.log(ngx.ALERT, 'Access denied for '..res.user.email..' - '..group)
     else
-        ngx.log(ngx.ALERT, 'GRANTED: '..group..' - '..groups[group])
-	-- FIXME: Meh.
-        ngx.req.set_header('Authenticated-User-Interface', groups[group])
+        ngx.log(ngx.ALERT, 'Access granted for '..res.user.email..' - '..group..' - '..groups[group])
+        ngx.req.set_header('X-Wired-Interface', groups[group])
         return
     end
 end

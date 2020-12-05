@@ -32,6 +32,8 @@ services:
       - WG_SERVER_CIDR=${WG_SERVER_CIDR}
       - WG_SERVER_ENDPOINT=${WG_SERVER_ENDPOINT}
       - WG_SERVER_PORT=${WG_SERVER_PORT}
+      - WG_DNS=${WG_DNS}
+      - WG_ALLOWED_IPS=${WG_ALLOWED_IPS}
 
   redis:
     image: "redis:alpine"
