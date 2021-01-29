@@ -23,8 +23,8 @@ func getAllowedIP(ip string) []net.IPNet {
 
 // This function accepts a list of strings and returns the next IP not in this
 // list. If we overflow the server CIDR, an error is returned.
-func getAvailableIP(ips []string) (string, error) {
-	ip, ipnet, err := net.ParseCIDR(serverCIDR)
+func getAvailableIP(ips []string, cidr string) (string, error) {
+	ip, ipnet, err := net.ParseCIDR(cidr)
 	check(err)
 
 	for stringInSlice(ip.String(), ips) {

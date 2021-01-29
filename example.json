@@ -1,0 +1,33 @@
+{
+    "oidc":{
+        "discovery_url":"https://accounts.google.com/.well-known/openid-configuration",
+        "client_id":"oidc_provider_client_id",
+        "client_secret":"oidc_provider_client_secret",
+        "allowed_email_domain":"gmail.com",
+        "http_domain":"example.com"
+    },
+    "interfaces":{
+        "wg0":{
+            "endpoint":"example.com",
+            "port":"51820",
+            "cidr":"10.100.0.1/24",
+            "allowed_ips":"10.0.0.0/8",
+            "dns":"1.1.1.1",
+            "groups":[
+                "Engineering",
+                "Product"
+            ]
+        },
+        "wg1":{
+            "endpoint":"example.com",
+            "port":"51821",
+            "cidr":"10.100.1.1/24",
+            "allowed_ips":"10.1.0.0/16",
+            "dns":"8.8.8.8",
+            "groups":[
+                "Marketing",
+                "Sales"
+            ]
+        }
+    }
+}

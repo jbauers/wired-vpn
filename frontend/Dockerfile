@@ -1,9 +1,10 @@
 FROM openresty/openresty:alpine-fat
 
 RUN apk add --no-cache \
-  ca-certificates
+  ca-certificates      \
+  jq
 
-RUN luarocks install lua-resty-http \
+RUN luarocks install lua-resty-http    \
  && luarocks install lua-resty-session \
  && luarocks install lua-resty-openidc
 

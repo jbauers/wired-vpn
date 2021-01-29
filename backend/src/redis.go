@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"log"
+	"os/exec"
 	"strings"
 
 	"github.com/go-redis/redis"
@@ -23,8 +24,18 @@ func redisClient() (client *redis.Client) {
 // Initialises the server, adding the server IP, public key and private key to
 // Redis, and returning the keys as strings. FIXME: Try fetching existing data
 // from Redis, too...
-func initServer(rc *redis.Client) (privateKey string, publicKey string) {
-	err := rc.SAdd("usedIPs", serverIP).Err()
+func initServer(serverInterface string, serverCIDR string, rc *redis.Client) (privateKey string, publicKey string) {
+	err := exec.Command("ip", "link", "add", "dev", serverInterface, "type", "wireguard").Run()
+	check(err)
+
+	err = exec.Command("ip", "address", "add", "dev", serverInterface, serverCIDR).Run()
+	check(err)
+
+	err = exec.Command("ip", "link", "set", "dev", serverInterface, "up").Run()
+	check(err)
+
+	serverIP := strings.Split(serverCIDR, "/")[0]
+	err = rc.SAdd("usedIPs", serverIP).Err()
 	check(err)
 
 	res, err := rc.HMGet(serverInterface, "ip", "pubkey", "privkey").Result()
@@ -47,11 +58,11 @@ func initServer(rc *redis.Client) (privateKey string, publicKey string) {
 // Assigns a free IP to a peer, returning the IP and an error. The usedIPs key
 // keeps the currently assigned IPs as a set in Redis. Assigning or freeing up
 // an IP is a matter of modifying this set.
-func assignIP(rc *redis.Client) (ip string, err error) {
+func assignIP(cidr string, rc *redis.Client) (ip string, err error) {
 	ips, err := rc.SMembers("usedIPs").Result()
 	check(err)
 
-	ip, err = getAvailableIP(ips)
+	ip, err = getAvailableIP(ips, cidr)
 	if err != nil {
 		return "", err
 	}
@@ -108,7 +119,7 @@ func handleClient(uid string, server Peer) (err error, ip string, publicKey stri
 		// Generate new keys and assign a free IP.
 		privateKey, publicKey, presharedKey = genKeys()
 
-		ip, err = assignIP(rc)
+		ip, err = assignIP(server.CIDR, rc)
 		if err != nil {
 			return err, "", "", "", ""
 		}
@@ -150,7 +161,7 @@ func handleClient(uid string, server Peer) (err error, ip string, publicKey stri
 		log.Printf("Added WireGuard peer %s %s %s", uid, ip, publicKey)
 		log.Printf("Updated WireGuard interface %s", server.Interface)
 
-	// Existing config and nothing to do - simply return the data.
+		// Existing config and nothing to do - simply return the data.
 	} else {
 		ip = user[0].(string)
 		publicKey = user[1].(string)
