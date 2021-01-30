@@ -8,29 +8,23 @@ services:
     depends_on:
       - backend
     networks:
-      - redis
-    environment:
-      - OIDC_DISCOVERY_URL=${OIDC_DISCOVERY_URL}
-      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
-      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
-      - EMAIL_DOMAIN=${EMAIL_DOMAIN}
-      - HTTP_SERVER_NAME=${HTTP_SERVER_NAME}
+      - web
+    volumes:
+      - ./settings.json:/settings.json:ro
 
   backend:
     build: ./backend
     ports:
-      - ${WG_SERVER_PORT}:${WG_SERVER_PORT}/udp
+      - 51820:51820/udp
     cap_add:
       - NET_ADMIN
     depends_on:
       - redis
     networks:
       - redis
-    environment:
-      - WG_SERVER_INTERFACE=${WG_SERVER_INTERFACE}
-      - WG_SERVER_CIDR=${WG_SERVER_CIDR}
-      - WG_SERVER_ENDPOINT=${WG_SERVER_ENDPOINT}
-      - WG_SERVER_PORT=${WG_SERVER_PORT}
+      - web
+    volumes:
+      - ./settings.json:/settings.json:ro
 
   redis:
     image: "redis:alpine"
@@ -44,4 +38,6 @@ services:
 
 networks:
   redis:
+    driver: bridge
+  web:
     driver: bridge

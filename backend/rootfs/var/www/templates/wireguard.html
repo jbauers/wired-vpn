@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wired VPN</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <div class="container w-50">
+      <h1 class="mt-4">Wired VPN</h1>
+      </br>
+      {{if .Access}}
+        <p>Below is your <a href="https://www.wireguard.com/install/">WireGuard</a> configuration file.</p>
+        <pre class="border border-primary rounded bg-light p-3">
+        [Interface]
+        Address = {{.IP}}
+        PrivateKey = {{.PrivateKey}}
+        DNS = {{.DNS}}
+
+        [Peer]
+        PublicKey = {{.PublicKey}}
+        PresharedKey = {{.PSK}}
+        AllowedIPs = {{.AllowedIPs}}
+        Endpoint = {{.Endpoint}}:{{.Port}}
+        </pre>
+      {{else}}
+        <p>Error: {{.Error}}</p>
+        <p>Please contact the server administrator.</p>
+      {{end}}
+    </div>
+  </body>
+</html>

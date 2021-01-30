@@ -13,7 +13,7 @@ RUN CGO_ENABLED=0 GOOS=linux \
 
 ##########
 FROM alpine
-RUN apk add --no-cache bash shorewall
+RUN apk add --no-cache bash curl shorewall
 
 COPY entrypoint.sh /
 ENTRYPOINT /entrypoint.sh
