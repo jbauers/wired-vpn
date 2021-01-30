@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -23,47 +22,42 @@ var keyTTL = time.Duration(30 * time.Second)
 // in until the key is expired, it will be removed (as described above).
 var minTTL = float64(10)
 
-// FIXME: Clean up redundant stuff.
+// Holds all peer information, whether that's a client or the server.
 type Peer struct {
 	Interface   string
-	CIDR        string
-	Endpoint    string
-	Port        int
 	PublicKey   string
 	PrivateKey  string
 	PSK         string
 	IP          string
-	AllowedIPs  string
-	DNS         string
-	Groups      []string
+	CIDR        string   `json:"cidr"`
+	Endpoint    string   `json:"endpoint"`
+	Port        int      `json:"port"`
+	AllowedIPs  string   `json:"allowed_ips"`
+	DNS         string   `json:"dns"`
+	Groups      []string `json:"groups"`
 	Access      bool
 	Error       string
 	RedisClient *redis.Client // Meh.
 }
 
+// Wrap []Peers in a struct for ServeHTTP.
 type Servers struct {
 	Peers []Peer
 }
 
+// Unmarshal our settings.json.
 type Settings struct {
-	Interfaces map[string]Interface `json:"interfaces"`
+	Interfaces map[string]Peer `json:"interfaces"`
 }
 
-type Interface struct {
-	CIDR       string   `json:"cidr"`
-	Endpoint   string   `json:"endpoint"`
-	Port       string   `json:"port"`
-	AllowedIPs string   `json:"allowed_ips"`
-	DNS        string   `json:"dns"`
-	Groups     []string `json:"groups"`
-}
-
+// Panic on error.
 func check(e error) {
 	if e != nil {
 		panic(e)
 	}
 }
 
+// Returns true if string in slice.
 func stringInSlice(s string, list []string) bool {
 	for _, v := range list {
 		if v == s {
@@ -73,6 +67,7 @@ func stringInSlice(s string, list []string) bool {
 	return false
 }
 
+// Returns the WireGuard interface for a given group.
 func getGroupInterface(peers []Peer, group string) string {
 	for _, p := range peers {
 		for _, g := range p.Groups {
@@ -84,16 +79,21 @@ func getGroupInterface(peers []Peer, group string) string {
 	return ""
 }
 
+// Handles incoming HTTP requests. Expects that authentication has been taken
+// care of upstream, as it takes the "X-Wired" headers passed from our proxy
+// and decides what do with this client.
 func (servers Servers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	tmpl := template.Must(template.ParseFiles("/var/www/templates/wireguard.html"))
 	w.Header().Add("Content-Type", "text/html")
 
+	// Default to access denied.
 	client := Peer{
 		Access: false,
 		Error:  "Access denied.",
 	}
 
-	// Get interface and user from header.
+	// Get group and user from headers. We can get the server
+	// this user belongs to from its group.
 	headers := make(map[string]interface{})
 	for k, v := range r.Header {
 		headers[k] = string(v[0])
@@ -109,15 +109,27 @@ func (servers Servers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		wgUser = value.(string)
 	}
 
-	// If both contain a valid value, continue.
+	// If both headers contain a valid value, continue.
 	if wgInterface != "" && wgUser != "" {
+
+		// All our servers are passed to ServeHTTP as peers.
+		// Once we have the WireGuard interface for this
+		// group, we use this server peer for this request.
 		var server Peer
 		for _, v := range servers.Peers {
 			if wgInterface == v.Interface {
 				server = v
 			}
 		}
+
+		// Handle the user on this server. handleClient() decides
+		// whether to rotate this user, add a new one, or return
+		// exisiting data.
 		err, clientIP, _, clientPrivateKey, clientPSK := handleClient(wgUser, server)
+
+		// During handleClient() we might error, for example if
+		// we run out of valid IP addresses. Render such an
+		// error.
 		if err != nil {
 			client = Peer{
 				Access: false,
@@ -141,6 +153,7 @@ func (servers Servers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// Read settings.
 	var settings Settings
 	s, err := ioutil.ReadFile("/settings.json")
 	check(err)
@@ -151,16 +164,16 @@ func main() {
 	// Init Redis
 	rc := redisClient()
 
+	// Prepare servers to be passed to ServeHTTP.
 	var servers Servers
 	for k, v := range settings.Interfaces {
 		serverPrivateKey, serverPublicKey := initServer(k, v.CIDR, rc)
-		serverPort, err := strconv.Atoi(v.Port)
 		check(err)
 		server := Peer{
 			Interface:   k,
 			CIDR:        v.CIDR,
 			Endpoint:    v.Endpoint,
-			Port:        serverPort,
+			Port:        v.Port,
 			PublicKey:   serverPublicKey,
 			PrivateKey:  serverPrivateKey,
 			AllowedIPs:  v.AllowedIPs,
@@ -184,11 +197,11 @@ func main() {
 		log.Printf("------------------------------------------------------------")
 	}
 
+	// Periodically update all interfaces to remove expired
+	// configurations.
 	go func() {
 		for true {
 			time.Sleep(10 * time.Second)
-
-			// FIXME: Improve.
 			peerList := getPeerList(rc)
 			for _, server := range servers.Peers {
 				updateInterface(server, peerList)

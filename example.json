@@ -9,7 +9,7 @@
     "interfaces":{
         "wg0":{
             "endpoint":"example.com",
-            "port":"51820",
+            "port":51820,
             "cidr":"10.100.0.1/24",
             "allowed_ips":"10.0.0.0/8",
             "dns":"1.1.1.1",
@@ -20,7 +20,7 @@
         },
         "wg1":{
             "endpoint":"example.com",
-            "port":"51821",
+            "port":51821,
             "cidr":"10.100.1.1/24",
             "allowed_ips":"10.1.0.0/16",
             "dns":"8.8.8.8",
