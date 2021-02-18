@@ -6,6 +6,14 @@
         "allowed_email_domain":"gmail.com",
         "http_domain":"example.com"
     },
+    "mail":{
+        "username":"vpn@example.com",
+        "password":"super_secret_password",
+        "identity":"",
+        "server":"smtp.gmail.com:465",
+        "from":"Example VPN",
+        "notify":false
+    },
     "interfaces":{
         "wg0":{
             "endpoint":"example.com",

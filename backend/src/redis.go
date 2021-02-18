@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"fmt"
 	"log"
 	"os/exec"
 	"strings"
@@ -22,8 +23,7 @@ func redisClient() (client *redis.Client) {
 }
 
 // Initialises the server, adding the server IP, public key and private key to
-// Redis, and returning the keys as strings. FIXME: Try fetching existing data
-// from Redis, too...
+// Redis, and returning the keys as strings.
 func initServer(serverInterface string, serverCIDR string, rc *redis.Client) (privateKey string, publicKey string) {
 	err := exec.Command("ip", "link", "add", "dev", serverInterface, "type", "wireguard").Run()
 	check(err)
@@ -34,14 +34,14 @@ func initServer(serverInterface string, serverCIDR string, rc *redis.Client) (pr
 	err = exec.Command("ip", "link", "set", "dev", serverInterface, "up").Run()
 	check(err)
 
-	serverIP := strings.Split(serverCIDR, "/")[0]
-	err = rc.SAdd("usedIPs", serverIP).Err()
-	check(err)
-
 	res, err := rc.HMGet(serverInterface, "ip", "pubkey", "privkey").Result()
 	check(err)
 
 	if res[0] == nil {
+		serverIP := strings.Split(serverCIDR, "/")[0]
+		err = rc.SAdd("usedIPs", serverIP).Err()
+		check(err)
+
 		privateKey, publicKey, _ = genKeys()
 		peer := map[string]interface{}{
 			"ip":      serverIP,
@@ -50,6 +50,9 @@ func initServer(serverInterface string, serverCIDR string, rc *redis.Client) (pr
 		}
 		err = rc.HMSet(serverInterface, peer).Err()
 		check(err)
+	} else {
+		publicKey = res[1].(string)
+		privateKey = res[2].(string)
 	}
 
 	return privateKey, publicKey
@@ -175,8 +178,9 @@ func handleClient(uid string, server Peer) (err error, ip string, publicKey stri
 
 // Periodically fetches user configs from Redis, and checks if a uid key has
 // expired. Returns a peer list for updateInterface with expired configs, with
-// the toRemove flag indicating that the server should remove the peer.
-func getPeerList(rc *redis.Client) (peerList []wgtypes.PeerConfig) {
+// the toRemove flag indicating that the server should remove the peer. Also
+// takes care of sending reminder emails.
+func getPeerList(rc *redis.Client, m Mail) (peerList []wgtypes.PeerConfig) {
 	users, err := rc.SMembers("users").Result()
 	check(err)
 
@@ -190,31 +194,49 @@ func getPeerList(rc *redis.Client) (peerList []wgtypes.PeerConfig) {
 			decoded, _ := base64.StdEncoding.DecodeString(b64)
 			s := strings.Split(string(decoded), " ")
 
+			ip := s[0]
+			publicKey := s[1]
+			presharedKey := s[2]
+			uid := s[3]
+
 			// When both the base64 string and uid key exist, we'll
 			// keep the config. When the uid key has expired, we'll
 			// set toRemove to true, and remove the stale entries.
-			if stringInSlice(s[3], keys) {
-				// FIXME: Remove if all good. May be needed on
-				// server restarts to fetch existing data tho.
-				// peerConfig := getPeerConfig(s[0], s[1], s[2], false)
-				// peerList = append(peerList, peerConfig)
+			if stringInSlice(uid, keys) {
+				peerConfig := getPeerConfig(ip, publicKey, presharedKey, false)
+				peerList = append(peerList, peerConfig)
 
-				log.Printf("Keeping WireGuard peer %s %s %s", s[3], s[0], s[1])
+				if m.Notify == true {
+					ttl, err := rc.TTL(uid).Result()
+					check(err)
+
+					if ttl.Seconds() < minTTL {
+						msg := fmt.Sprintf("Your VPN configuration is expiring in %f hours. Please replace your configuration to avoid being disconnected.", ttl.Hours())
+						sendMail(uid, m, msg)
+					}
+				}
+
+				log.Printf("Keeping WireGuard peer %s %s %s", uid, ip, publicKey)
 			} else {
 				// Remove stale base64 string from Redis.
 				err = rc.SRem("users", b64).Err()
 				check(err)
 
 				// Free up IP.
-				err = rc.SRem("usedIPs", s[0]).Err()
+				err = rc.SRem("usedIPs", ip).Err()
 				check(err)
 
 				// Add stale config to peerList with toRemove
 				// set to true.
-				peerConfig := getPeerConfig(s[0], s[1], s[2], true)
+				peerConfig := getPeerConfig(ip, publicKey, presharedKey, true)
 				peerList = append(peerList, peerConfig)
 
-				log.Printf("Removing WireGuard peer %s %s %s", s[3], s[0], s[1])
+				if m.Notify == true {
+					msg := "Your VPN configuration has expired and you have been disconnected."
+					sendMail(uid, m, msg)
+				}
+
+				log.Printf("Removing WireGuard peer %s %s %s", uid, ip, publicKey)
 			}
 		}
 	}

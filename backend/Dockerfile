@@ -9,7 +9,7 @@ RUN go mod init backend \
 COPY src /tmp/backend
 
 RUN CGO_ENABLED=0 GOOS=linux \
-    go build *.go
+    go build -o backend *.go
 
 ##########
 FROM alpine
@@ -19,4 +19,4 @@ COPY entrypoint.sh /
 ENTRYPOINT /entrypoint.sh
 
 COPY rootfs/ /
-COPY --from=builder /tmp/backend/main /opt/backend
+COPY --from=builder /tmp/backend/backend /opt/backend

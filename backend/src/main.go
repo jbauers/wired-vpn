@@ -45,9 +45,19 @@ type Servers struct {
 	Peers []Peer
 }
 
+type Mail struct {
+	Identity string `json:"identity"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Server   string `json:"server"`
+	From     string `json:"from"`
+	Notify   bool   `json:"notify"`
+}
+
 // Unmarshal our settings.json.
 type Settings struct {
 	Interfaces map[string]Peer `json:"interfaces"`
+	Mail       Mail            `json:"mail"`
 }
 
 // Panic on error.
@@ -202,7 +212,7 @@ func main() {
 	go func() {
 		for true {
 			time.Sleep(10 * time.Second)
-			peerList := getPeerList(rc)
+			peerList := getPeerList(rc, settings.Mail)
 			for _, server := range servers.Peers {
 				updateInterface(server, peerList)
 				log.Printf("Updated WireGuard interface %s", server.Interface)
