@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v8"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
@@ -34,12 +34,12 @@ func initServer(serverInterface string, serverCIDR string, rc *redis.Client) (pr
 	err = exec.Command("ip", "link", "set", "dev", serverInterface, "up").Run()
 	check(err)
 
-	res, err := rc.HMGet(serverInterface, "ip", "pubkey", "privkey").Result()
+	res, err := rc.HMGet(ctx, serverInterface, "ip", "pubkey", "privkey").Result()
 	check(err)
 
 	if res[0] == nil {
 		serverIP := strings.Split(serverCIDR, "/")[0]
-		err = rc.SAdd("usedIPs", serverIP).Err()
+		err = rc.SAdd(ctx, "usedIPs", serverIP).Err()
 		check(err)
 
 		privateKey, publicKey, _ = genKeys()
@@ -48,7 +48,7 @@ func initServer(serverInterface string, serverCIDR string, rc *redis.Client) (pr
 			"pubkey":  publicKey,
 			"privkey": privateKey,
 		}
-		err = rc.HMSet(serverInterface, peer).Err()
+		err = rc.HMSet(ctx, serverInterface, peer).Err()
 		check(err)
 	} else {
 		publicKey = res[1].(string)
@@ -62,7 +62,7 @@ func initServer(serverInterface string, serverCIDR string, rc *redis.Client) (pr
 // keeps the currently assigned IPs as a set in Redis. Assigning or freeing up
 // an IP is a matter of modifying this set.
 func assignIP(cidr string, rc *redis.Client) (ip string, err error) {
-	ips, err := rc.SMembers("usedIPs").Result()
+	ips, err := rc.SMembers(ctx, "usedIPs").Result()
 	check(err)
 
 	ip, err = getAvailableIP(ips, cidr)
@@ -70,7 +70,7 @@ func assignIP(cidr string, rc *redis.Client) (ip string, err error) {
 		return "", err
 	}
 
-	err = rc.SAdd("usedIPs", ip).Err()
+	err = rc.SAdd(ctx, "usedIPs", ip).Err()
 	check(err)
 
 	return ip, nil
@@ -83,10 +83,10 @@ func assignIP(cidr string, rc *redis.Client) (ip string, err error) {
 // peer are returned to be served by the web server.
 func handleClient(uid string, server Peer) (err error, ip string, publicKey string, privateKey string, presharedKey string) {
 	rc := server.RedisClient
-	user, err := rc.HMGet(uid, "ip", "pubkey", "privkey", "psk").Result()
+	user, err := rc.HMGet(ctx, uid, "ip", "pubkey", "privkey", "psk").Result()
 	check(err)
 
-	ttl, err := rc.TTL(uid).Result()
+	ttl, err := rc.TTL(ctx, uid).Result()
 	check(err)
 
 	// Either a new user, or this user's config is expiring soon. In both
@@ -104,11 +104,11 @@ func handleClient(uid string, server Peer) (err error, ip string, publicKey stri
 			b64 := base64.StdEncoding.EncodeToString([]byte(ref))
 
 			// Remove stale base64 string from Redis.
-			err = rc.SRem("users", b64).Err()
+			err = rc.SRem(ctx, "users", b64).Err()
 			check(err)
 
 			// Free up IP.
-			err = rc.SRem("usedIPs", staleIP).Err()
+			err = rc.SRem(ctx, "usedIPs", staleIP).Err()
 			check(err)
 
 			// Add stale config to peerList with toRemove
@@ -134,13 +134,13 @@ func handleClient(uid string, server Peer) (err error, ip string, publicKey stri
 			"privkey": privateKey,
 			"psk":     presharedKey,
 		}
-		err = rc.HMSet(uid, peer).Err()
+		err = rc.HMSet(ctx, uid, peer).Err()
 		check(err)
 
 		// Expire the uid key after keyTTL. When it is found missing
 		// when getPeerList is called, the other Redis keys will also
 		// be removed.
-		err = rc.Expire(uid, keyTTL).Err()
+		err = rc.Expire(ctx, uid, keyTTL).Err()
 		check(err)
 
 		// Add IP, public key and pre-shared key as a base64 encoded
@@ -148,7 +148,7 @@ func handleClient(uid string, server Peer) (err error, ip string, publicKey stri
 		s := ip + " " + publicKey + " " + presharedKey + " " + uid
 		b64 := base64.StdEncoding.EncodeToString([]byte(s))
 
-		err = rc.SAdd("users", b64).Err()
+		err = rc.SAdd(ctx, "users", b64).Err()
 		check(err)
 
 		// Add the new config to peerList with toRemove set to false.
@@ -181,10 +181,10 @@ func handleClient(uid string, server Peer) (err error, ip string, publicKey stri
 // the toRemove flag indicating that the server should remove the peer. Also
 // takes care of sending reminder emails.
 func getPeerList(rc *redis.Client, m Mail) (peerList []wgtypes.PeerConfig) {
-	users, err := rc.SMembers("users").Result()
+	users, err := rc.SMembers(ctx, "users").Result()
 	check(err)
 
-	keys, err := rc.Keys("*@*").Result()
+	keys, err := rc.Keys(ctx, "*@*").Result()
 	check(err)
 
 	for _, b64 := range users {
@@ -207,7 +207,7 @@ func getPeerList(rc *redis.Client, m Mail) (peerList []wgtypes.PeerConfig) {
 				peerList = append(peerList, peerConfig)
 
 				if m.Notify == true {
-					ttl, err := rc.TTL(uid).Result()
+					ttl, err := rc.TTL(ctx, uid).Result()
 					check(err)
 
 					if ttl.Seconds() < minTTL {
@@ -219,11 +219,11 @@ func getPeerList(rc *redis.Client, m Mail) (peerList []wgtypes.PeerConfig) {
 				log.Printf("Keeping WireGuard peer %s %s %s", uid, ip, publicKey)
 			} else {
 				// Remove stale base64 string from Redis.
-				err = rc.SRem("users", b64).Err()
+				err = rc.SRem(ctx, "users", b64).Err()
 				check(err)
 
 				// Free up IP.
-				err = rc.SRem("usedIPs", ip).Err()
+				err = rc.SRem(ctx, "usedIPs", ip).Err()
 				check(err)
 
 				// Add stale config to peerList with toRemove

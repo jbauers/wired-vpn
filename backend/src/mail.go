@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net"
 	"net/mail"
 	"net/smtp"
@@ -47,44 +46,31 @@ func sendMail(receiver string, m Mail, msg string) {
 	}
 
 	conn, err := tls.Dial("tcp", servername, tlsconfig)
-	if err != nil {
-		log.Panic(err)
-	}
+	check(err)
 
 	c, err := smtp.NewClient(conn, host)
-	if err != nil {
-		log.Panic(err)
-	}
+	check(err)
 
 	// Auth
-	if err = c.Auth(auth); err != nil {
-		log.Panic(err)
-	}
+	err = c.Auth(auth)
+	check(err)
 
 	// To && From
-	if err = c.Mail(from.Address); err != nil {
-		log.Panic(err)
-	}
+	err = c.Mail(from.Address)
+	check(err)
 
-	if err = c.Rcpt(to.Address); err != nil {
-		log.Panic(err)
-	}
+	err = c.Rcpt(to.Address)
+	check(err)
 
 	// Data
 	w, err := c.Data()
-	if err != nil {
-		log.Panic(err)
-	}
+	check(err)
 
 	_, err = w.Write([]byte(message))
-	if err != nil {
-		log.Panic(err)
-	}
+	check(err)
 
 	err = w.Close()
-	if err != nil {
-		log.Panic(err)
-	}
+	check(err)
 
 	c.Quit()
 }

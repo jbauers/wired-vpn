@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"html/template"
 	"io/ioutil"
@@ -8,8 +9,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v8"
 )
+
+var ctx = context.Background()
 
 // Expiry of Redis keys for WireGuard key rotation. We expire the "uid"
 // key after the keyTTL value. Upon interface update, when the "uid"
@@ -63,7 +66,7 @@ type Settings struct {
 // Panic on error.
 func check(e error) {
 	if e != nil {
-		panic(e)
+		log.Panic(e)
 	}
 }
 
