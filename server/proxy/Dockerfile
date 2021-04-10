@@ -12,4 +12,4 @@ COPY entrypoint.sh /
 ENTRYPOINT /entrypoint.sh
 
 COPY nginx.conf /usr/local/openresty/nginx/conf/
-COPY auth.lua css/ /opt/
+COPY auth.lua /opt/

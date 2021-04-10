@@ -1,21 +1,25 @@
 version: '3'
 
 services:
-  frontend:
-    build: ./frontend
+  proxy:
+    build: ./proxy
     ports:
       - 80:8080
+      - 443:443
     depends_on:
-      - backend
+      - api
     networks:
       - web
     volumes:
+      - ./ssl:/ssl:ro
       - ./settings.json:/settings.json:ro
 
-  backend:
-    build: ./backend
+  api:
+    build: ./api
     ports:
       - 51820:51820/udp
+    environment:
+      - LOCAL=true
     cap_add:
       - NET_ADMIN
     depends_on:
@@ -24,7 +28,7 @@ services:
       - redis
       - web
     volumes:
-      - ./settings.json:/settings.json:ro
+      - ./settings.json:/settings.json.tpl:ro
 
   redis:
     image: "redis:alpine"

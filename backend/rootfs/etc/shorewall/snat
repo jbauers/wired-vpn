@@ -1,2 +1,0 @@
-#ACTION               SOURCE              DEST
-MASQUERADE            wg0                 eth0

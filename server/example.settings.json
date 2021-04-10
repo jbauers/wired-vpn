@@ -1,0 +1,24 @@
+{
+    "oidc":{
+        "http_endpoint":"example.com",
+        "discovery_url":"https://acme.onelogin.com/oidc/2/.well-known/openid-configuration",
+        "client_id":"not_so_secret",
+        "client_secret":"super_secret",
+        "allowed_email_domain":"acme.com",
+	"allowed_groups":[
+		"Product"
+	]
+    },
+    "interfaces":{
+        "wg0":{
+            "endpoint":"ETH0_IP",
+            "port":51820,
+            "cidr":"10.100.0.1/24",
+            "allowed_ips":"10.0.0.0/8",
+            "dns":"1.1.1.1",
+            "groups":[
+                "Product"
+            ]
+        }
+    }
+}

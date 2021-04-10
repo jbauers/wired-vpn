@@ -1,5 +1,0 @@
-#SOURCE     DEST        POLICY          LOGLEVEL
-vpn         all         ACCEPT
-$fw         all         ACCEPT
-net         all         DROP
-all         all         REJECT          info

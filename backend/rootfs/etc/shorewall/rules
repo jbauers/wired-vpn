@@ -1,3 +1,0 @@
-?SECTION NEW
-ACCEPT         all       $fw     udp
-Ping(ACCEPT)   all       all

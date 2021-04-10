@@ -1,2 +1,0 @@
-#TYPE                   ZONE            GATEWAY                 GATEWAY_ZONE
-openvpnserver:udp:51820 net             0.0.0.0/0               vpn

@@ -6,8 +6,10 @@
 
 down() {
 	docker-compose down
+	popd
 }
 
 trap down TERM SIGINT
 
+pushd server
 docker-compose up --build --force-recreate -V

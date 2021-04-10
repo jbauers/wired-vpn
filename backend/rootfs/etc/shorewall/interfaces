@@ -1,4 +1,0 @@
-?FORMAT 2
-#ZONE       INTERFACE       OPTIONS
-net         eth0            tcpflags,nosmurfs,routefilter,logmartians
-vpn         wg0

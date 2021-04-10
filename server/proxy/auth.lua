@@ -15,17 +15,18 @@ local opts = {
 
     redirect_uri = ngx.var.scheme.."://"..ngx.var.server_name.."/redirect_uri",
     token_signing_alg_values_expected = "RS256",
+    accept_unsupported_alg = false,
 }
 
 -- Get valid groups from settings.
 local groups = {}
-for _, i  in pairs(s['interfaces']) do
-    for _, g in pairs(i['groups']) do
-        groups[g] = true
-    end
+for _, g in pairs(s['oidc']['allowed_groups']) do
+    groups[g] = true
 end
 
--- Authenticate.
+-- Get the public key before authenticating.
+local public_key = ngx.var.arg_public_key
+
 local res, err = require("resty.openidc").authenticate(opts)
 if err or not res then
     ngx.status = 403
@@ -38,20 +39,23 @@ if not res.user.email then
 end
 
 -- Validate.
-local lastAt = res.user.email:find("[^%@]+$")
-local domainPart = res.user.email:sub(lastAt, #res.user.email)
+local last_at = res.user.email:find("[^%@]+$")
+local domain_part = res.user.email:sub(last_at, #res.user.email)
 
-if domainPart ~= s['oidc']['allowed_email_domain'] then
+if domain_part ~= s['oidc']['allowed_email_domain'] then
     ngx.status = 403
     ngx.exit(ngx.HTTP_FORBIDDEN)
 end
 
 for _, group in pairs(res.user.groups) do
     if groups[group] then
-        -- Set headers and proxy pass to our backend.
         ngx.req.set_header('X-Wired-User', res.user.email)
         ngx.req.set_header('X-Wired-Group', group)
-        ngx.log(ngx.ALERT, 'Access granted: '..res.user.email..' - '..group)
+        ngx.req.set_header('X-Wired-Public-Key', public_key)
+        ngx.log(ngx.ALERT, 'Access granted: '..res.user.email..' - '..group..' - '..public_key)
         return
     end
 end
+
+ngx.status = 403
+ngx.exit(ngx.HTTP_FORBIDDEN)

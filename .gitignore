@@ -1,1 +1,6 @@
-settings.json
+client/fyne-cross
+client/Icon.png
+server/settings.json
+server/ssl
+wired
+wired.exe
