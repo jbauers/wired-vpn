@@ -18,8 +18,12 @@ services:
     build: ./api
     ports:
       - 51820:51820/udp
+      - 8080:8080/tcp
     environment:
       - LOCAL=true
+      - MQ_REDIS_SERVER_ADDRESS=redis:6379
+      - MQ_REDIS_SERVER_PASSWORD=pass
+      - MQ_CHANNELS=peers
     cap_add:
       - NET_ADMIN
     depends_on:
@@ -34,7 +38,7 @@ services:
     image: "redis:alpine"
     expose:
       - 6379
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "pass"]
     volumes:
       - /data
     networks:

@@ -2,6 +2,7 @@ FROM openresty/openresty:alpine-fat
 
 RUN apk add --no-cache \
   ca-certificates      \
+  git                  \
   jq
 
 RUN luarocks install lua-resty-http    \

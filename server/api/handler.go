@@ -225,7 +225,7 @@ func initServer(serverInterface string, serverCIDR string, rc *redis.Client) (pr
 func redisClient() (client *redis.Client) {
 	client = redis.NewClient(&redis.Options{
 		Addr:       "redis:6379",
-		Password:   "",
+		Password:   "pass",
 		DB:         0,
 		MaxRetries: 3,
 	})
