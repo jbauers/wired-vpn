@@ -1,4 +1,6 @@
-# wired
+<img height="64" src="./docs/wired.png">
+
+# Wired
 
 This is a VPN server and client using [WireGuard](https://www.wireguard.com) with authentication using OIDC. It is experimental, a playground and learning experience, and **should not be used in a production environment**, at least not in its current state. There are 3 components that work together:
 
