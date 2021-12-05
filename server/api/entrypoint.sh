@@ -7,4 +7,4 @@ else
 fi
 sed "s/ETH0_IP/${ETH0_IP}/g" /settings.json.tpl > /settings.json
 
-exec /opt/mq; /opt/backend
+/opt/mq & /opt/backend

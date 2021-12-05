@@ -104,9 +104,13 @@ func handleClient(uid string, clientPublicKey string, server Peer, redisClient *
 		check(err)
 
 		// FIXME
-		// We could create a WSS message queue here, and send a message
-		// to our subscribed WireGuard server with ip, clientPublicKey,
-		// presharedKey, with an action ADD here and/or DEL above.
+		// Use mullvad/message-queue here, and publish a message on this
+		// channel. MQ will do the "heavy-lifting" for us and send a WSS
+		// message on :8080/channel/peers. We can now simply have a
+		// client listen on this URL and have it configure its interface
+		// with this peer (WIP).
+		err = rc.Publish(ctx, "peers", b64).Err()
+		check(err)
 
 		// Add the new config to peerList with toRemove set to false.
 		peerConfig := getPeerConfig(ip, clientPublicKey, presharedKey, false)
