@@ -64,6 +64,12 @@ func handleClient(uid string, clientPublicKey string, server Peer, redisClient *
 			err = rc.SRem(ctx, "usedIPs", staleIP).Err()
 			check(err)
 
+			// FIXME
+			// Publish on our channel.
+			a := "DEL " + ref
+			err = rc.Publish(ctx, "peers", a).Err()
+			check(err)
+
 			// Add stale config to peerList with toRemove
 			// set to true.
 			stalePeerConfig := getPeerConfig(staleIP, stalePublicKey, stalePresharedKey, true)
@@ -109,7 +115,8 @@ func handleClient(uid string, clientPublicKey string, server Peer, redisClient *
 		// message on :8080/channel/peers. We can now simply have a
 		// client listen on this URL and have it configure its interface
 		// with this peer (WIP).
-		err = rc.Publish(ctx, "peers", b64).Err()
+		a := "ADD " + s
+		err = rc.Publish(ctx, "peers", a).Err()
 		check(err)
 
 		// Add the new config to peerList with toRemove set to false.
@@ -172,9 +179,10 @@ func getPeerList(rc *redis.Client) (peerList []wgtypes.PeerConfig) {
 				check(err)
 
 				// FIXME
-				// We could create a WSS message queue here, and send a message
-				// to our subscribed WireGuard server with the clientPublicKey
-				// and the action DEL.
+				// Publish on our channel.
+				a := "DEL " + string(decoded)
+				err = rc.Publish(ctx, "peers", a).Err()
+				check(err)
 
 				// Add stale config to peerList with toRemove
 				// set to true.

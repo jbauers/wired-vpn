@@ -19,7 +19,7 @@ var ctx = context.Background()
 // key after the keyTTL value. Upon interface update, when the "uid"
 // is missing, but present as part of the "users" SMEMBERS, we will
 // free up the IP from "usedIPs" and remove the stale config.
-var keyTTL = time.Duration(5 * time.Minute)
+var keyTTL = time.Duration(1 * time.Minute)
 
 // If a request comes in and the TTL for its "uid" key is less than this
 // minTTL value, the WireGuard keys will be rotated. If no request comes

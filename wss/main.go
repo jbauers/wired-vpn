@@ -1,7 +1,6 @@
 package main
 
 import (
-	b64 "encoding/base64"
 	"flag"
 	"log"
 	"net/url"
@@ -39,12 +38,11 @@ func main() {
 		defer close(done)
 		for {
 			_, message, err := c.ReadMessage()
-			m, _ := b64.StdEncoding.DecodeString(string(message))
 			if err != nil {
 				log.Println("read:", err)
 				return
 			}
-			log.Printf("recv: %s", m)
+			log.Printf("recv: %s", string(message))
 		}
 	}()
 
