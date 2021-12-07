@@ -18,7 +18,8 @@ services:
     build: ./api
     ports:
       - 51820:51820/udp
-      - 8080:8080/tcp
+    expose:
+      - 8080
     environment:
       - LOCAL=true
       - MQ_REDIS_SERVER_ADDRESS=redis:6379
@@ -31,8 +32,20 @@ services:
     networks:
       - redis
       - web
+      - wss
     volumes:
       - ./settings.json:/settings.json.tpl:ro
+
+  wss:
+    build: ./wss
+    expose:
+      - 8081
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      - api
+    networks:
+      - wss
 
   redis:
     image: "redis:alpine"
@@ -48,4 +61,6 @@ networks:
   redis:
     driver: bridge
   web:
+    driver: bridge
+  wss:
     driver: bridge

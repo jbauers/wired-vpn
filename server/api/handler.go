@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/base64"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os/exec"
 	"strings"
 
@@ -37,6 +39,11 @@ func handleClient(uid string, clientPublicKey string, server Peer, redisClient *
 	rc := redisClient
 	user, err := rc.HMGet(ctx, uid, "ip", "pubkey", "psk").Result()
 	check(err)
+
+	// FIXME
+	url := "http://wss:8081/public"
+	server.PublicKey, server.CIDR = getRequest(url)
+	log.Printf("GET %s: %s %s", url, server.PublicKey, server.CIDR)
 
 	ttl, err := rc.TTL(ctx, uid).Result()
 	check(err)
@@ -217,7 +224,7 @@ func initServer(serverInterface string, serverCIDR string, rc *redis.Client) (pr
 		err = rc.SAdd(ctx, "usedIPs", serverIP).Err()
 		check(err)
 
-		privateKey, publicKey, _ = genKeys()
+		privateKey, _, _ = genKeys()
 		peer := map[string]interface{}{
 			"ip":      serverIP,
 			"pubkey":  publicKey,
@@ -231,6 +238,20 @@ func initServer(serverInterface string, serverCIDR string, rc *redis.Client) (pr
 	}
 
 	return privateKey, publicKey
+}
+
+func getRequest(url string) (serverPublicKey string, serverCIDR string) {
+	resp, err := http.Get(url)
+	check(err)
+
+	body, err := ioutil.ReadAll(resp.Body)
+	check(err)
+
+	s := string(body)
+	serverPublicKey = strings.Split(s, " ")[0]
+	serverCIDR = strings.Split(s, " ")[1]
+	log.Printf(s)
+	return serverPublicKey, serverCIDR
 }
 
 // Returns a new Redis client.

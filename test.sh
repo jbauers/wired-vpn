@@ -11,5 +11,7 @@ docker exec server_api_1 \
 	curl -v \
 	  -H "X-Wired-User: test1@example.com" \
 	  -H "X-Wired-Group: Infrastructure" \
-	  -H "X-Wired-Public-Key: 9TKwZcutg7jaL0CGKj+LhKrSfvTGigfO9AwULMBRu0E=" \
+	  -H "X-Wired-Public-Key: EEe14kEj3DkXiK9YmjMxvGFh3GYwifgV55BkzE4YXUk=" \
 	api:9000
+sleep 1
+docker exec server_wss_1 wg
