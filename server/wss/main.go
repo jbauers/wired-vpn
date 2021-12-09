@@ -2,13 +2,13 @@ package main
 
 import (
 	"flag"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,8 +21,11 @@ const subProtocol = "message-queue-v1"
 
 var addr = flag.String("addr", "api:8080", "http service address")
 var wgInterface = flag.String("interface", "wg0", "WireGuard interface")
+var wgEndpoint = flag.String("endpoint", "192.168.0.1", "WireGuard endpoint IP")
 var wgPort = flag.Int("port", 51820, "WireGuard listen port")
 var wgNetwork = flag.String("network", "10.100.0.1/24", "WireGuard network")
+var wgAllowedIPs = flag.String("allowed-ips", "10.0.0.0/8", "WireGuard allowed IPs")
+var wgDNS = flag.String("dns", "1.1.1.1", "WireGuard DNS")
 
 func check(e error) {
 	if e != nil {
@@ -99,7 +102,23 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/channel/peers"}
+	data := url.Values{
+		"interface":  {*wgInterface},
+		"endpoint":   {*wgEndpoint},
+		"port":       {strconv.Itoa(*wgPort)},
+		"pubkey":     {publicKey},
+		"network":    {*wgNetwork},
+		"allowedips": {*wgAllowedIPs},
+		"dns":        {*wgDNS},
+	}
+
+	// FIXME: Response handling.
+	_, err = http.PostForm("http://api:8081/register", data)
+	if err != nil {
+		log.Fatal("post:", err)
+	}
+
+	u := url.URL{Scheme: "ws", Host: *addr, Path: "/channel/" + *wgInterface}
 	log.Printf("connecting to %s", u.String())
 
 	d := websocket.Dialer{Subprotocols: []string{subProtocol}}
@@ -120,11 +139,14 @@ func main() {
 				return
 			}
 			log.Printf("recv: %s", string(message))
+
 			s := strings.Split(string(message), " ")
 			action := s[0]
 			ip := s[1]
 			publicKey := s[2]
 			presharedKey := s[3]
+			uid := s[4]
+
 			var peerList []wgtypes.PeerConfig
 			if action == "ADD" {
 				peerConfig := getPeerConfig(ip, publicKey, presharedKey, false)
@@ -135,21 +157,14 @@ func main() {
 			} else {
 				log.Fatal("unsupported action, aborting")
 			}
+
 			err = updateInterface(privateKey, peerList)
 			if err != nil {
 				log.Println("couldn't update interface:", err)
 				return
 			}
+			log.Printf("Updated interface: %s %s %s %s", action, uid, ip, publicKey)
 		}
-	}()
-
-	go func() {
-		publicHandler := func(w http.ResponseWriter, req *http.Request) {
-			io.WriteString(w, publicKey+" "+*wgNetwork)
-		}
-
-		http.HandleFunc("/public", publicHandler)
-		log.Fatal(http.ListenAndServe(":8081", nil))
 	}()
 
 	ticker := time.NewTicker(time.Second)

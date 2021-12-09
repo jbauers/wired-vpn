@@ -16,15 +16,14 @@ services:
 
   api:
     build: ./api
-    ports:
-      - 51820:51820/udp
     expose:
       - 8080
+      - 8081
     environment:
       - LOCAL=true
       - MQ_REDIS_SERVER_ADDRESS=redis:6379
       - MQ_REDIS_SERVER_PASSWORD=pass
-      - MQ_CHANNELS=peers
+      - MQ_CHANNELS=wg0,wg1
     cap_add:
       - NET_ADMIN
     depends_on:
@@ -36,10 +35,29 @@ services:
     volumes:
       - ./settings.json:/settings.json.tpl:ro
 
-  wss:
+  wss0:
     build: ./wss
-    expose:
-      - 8081
+    ports:
+      - 51820:51820/udp
+    environment:
+      - WG_INTERFACE=wg0
+      - WG_NETWORK=10.100.1.1/24
+      - WG_PORT=51820
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      - api
+    networks:
+      - wss
+
+  wss1:
+    ports:
+      - 51821:51821/udp
+    environment:
+      - WG_INTERFACE=wg1
+      - WG_NETWORK=10.100.0.1/24
+      - WG_PORT=51821
+    build: ./wss
     cap_add:
       - NET_ADMIN
     depends_on:

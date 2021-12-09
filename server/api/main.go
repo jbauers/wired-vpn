@@ -4,6 +4,7 @@ import (
 	"context"
 	b64 "encoding/base64"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -35,7 +36,7 @@ type Peer struct {
 	IP         string   `json:"ip"`
 	CIDR       string   `json:"cidr"`
 	Endpoint   string   `json:"endpoint"`
-	Port       int      `json:"port"`
+	Port       string   `json:"port"`
 	AllowedIPs string   `json:"allowed_ips"`
 	DNS        string   `json:"dns"`
 	Groups     []string `json:"groups"`
@@ -116,7 +117,8 @@ func (servers Servers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Handle the user on this server. handleClient() decides
 		// whether to rotate this user, add a new one, or return
 		// exisiting data.
-		err, clientIP, _, clientPSK := handleClient(wgUser, wgPublicKey, server, servers.RedisClient)
+		serverEndpoint, serverPort, serverPublicKey, serverNetwork, serverAllowedIPs, serverDNS := getServerInfo(server.Interface, servers.RedisClient)
+		err, clientIP, _, clientPSK := handleClient(wgUser, wgPublicKey, serverNetwork, server, servers.RedisClient)
 
 		// During handleClient() we might error, for example if
 		// we run out of valid IP addresses. Render such an
@@ -128,13 +130,13 @@ func (servers Servers) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			client = Peer{
-				Endpoint:   server.Endpoint,
-				Port:       server.Port,
-				PublicKey:  server.PublicKey,
+				Endpoint:   serverEndpoint,
+				Port:       serverPort,
+				PublicKey:  serverPublicKey,
 				PSK:        clientPSK,
 				IP:         clientIP,
-				AllowedIPs: server.AllowedIPs,
-				DNS:        server.DNS,
+				AllowedIPs: serverAllowedIPs,
+				DNS:        serverDNS,
 				Access:     true,
 			}
 		}
@@ -163,35 +165,51 @@ func main() {
 	// Prepare servers to be passed to ServeHTTP.
 	var servers Servers
 	for iface, setting := range settings.Interfaces {
-		// Start server and get its keys, so we can update
-		// the interface later.
-		serverPrivateKey, serverPublicKey := initServer(iface, setting.CIDR, rc)
-		check(err)
 		server := Peer{
-			Interface:  iface,
-			CIDR:       setting.CIDR,
-			Endpoint:   setting.Endpoint,
-			Port:       setting.Port,
-			PublicKey:  serverPublicKey,
-			PrivateKey: serverPrivateKey,
-			AllowedIPs: setting.AllowedIPs,
-			Groups:     setting.Groups,
-			DNS:        setting.DNS,
+			Interface: iface,
+			Groups:    setting.Groups,
 		}
 		servers.Peers = append(servers.Peers, server)
 	}
 
-	// Log initialised server info.
-	printServerInfo(servers)
+	go func() {
+		registerHandler := func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case "POST":
+				if err := r.ParseForm(); err != nil {
+					io.WriteString(w, "Form parse error.")
+					return
+				}
+
+				serverInterface := r.FormValue("interface")
+				serverEndpoint := r.FormValue("endpoint")
+				serverPort := r.FormValue("port")
+				serverPublicKey := r.FormValue("pubkey")
+				serverNetwork := r.FormValue("network")
+				serverAllowedIPs := r.FormValue("allowedips")
+				serverDNS := r.FormValue("dns")
+
+				err = setServerInfo(serverInterface, serverEndpoint, serverPort, serverPublicKey, serverNetwork, serverAllowedIPs, serverDNS, rc)
+				check(err)
+
+				io.WriteString(w, "ok")
+			default:
+				io.WriteString(w, "Sorry, only POST supported.")
+			}
+		}
+
+		http.HandleFunc("/register", registerHandler)
+		log.Fatal(http.ListenAndServe(":8081", nil))
+	}()
 
 	// Periodically update all interfaces to remove expired
 	// configurations.
 	go func() {
 		for true {
 			time.Sleep(10 * time.Second)
-			peerList := getPeerList(rc)
-			for _, server := range servers.Peers {
-				updateInterface(server, peerList)
+			for name, _ := range settings.Interfaces {
+				err := getPeerList(name, rc)
+				check(err)
 			}
 		}
 	}()
