@@ -68,6 +68,7 @@ func handleClient(uid string, clientPublicKey string, serverNetwork string, serv
 			a := "DEL " + ref
 			err = rc.Publish(ctx, redisChannel, a).Err()
 			check(err)
+			log.Printf("SEND %s %s", server.Interface, a)
 		}
 
 		// Generate new PSK and assign a free IP.
@@ -111,13 +112,13 @@ func handleClient(uid string, clientPublicKey string, serverNetwork string, serv
 		a := "ADD " + s
 		err = rc.Publish(ctx, redisChannel, a).Err()
 		check(err)
-
+		log.Printf("SEND %s %s", server.Interface, a)
 	} else {
 		ip = user[0].(string)
 		publicKey = user[1].(string)
 		presharedKey = user[2].(string)
 
-		log.Printf("EXIST: %s %s %s", uid, ip, publicKey)
+		log.Printf("EXIST %s %s %s %s %s", server.Interface, ip, publicKey, presharedKey, uid)
 	}
 	ipCidrString := getIpCidrString(ip, serverNetwork)
 	return nil, ipCidrString, publicKey, presharedKey
@@ -164,12 +165,13 @@ func getPeerList(serverName string, newServer bool, rc *redis.Client) error {
 				a := "DEL " + string(decoded)
 				err = rc.Publish(ctx, redisChannel, a).Err()
 				check(err)
+				log.Printf("SEND %s DEL %s %s %s %s", serverName, ip, publicKey, presharedKey, uid)
 			} else if newServer {
 				// Handle WireGguard server restarts properly.
 				s := "ADD " + ip + " " + publicKey + " " + presharedKey + " " + uid
 				err = rc.Publish(ctx, redisChannel, s).Err()
 				check(err)
-				log.Printf("RE-ADD: %s %s %s", uid, ip, publicKey)
+				log.Printf("SEND %s ADD %s %s %s %s", serverName, ip, publicKey, presharedKey, uid)
 			}
 		}
 	}

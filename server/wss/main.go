@@ -27,7 +27,6 @@ var wgDNS = flag.String("dns", "1.1.1.1", "WireGuard DNS")
 
 func main() {
 	flag.Parse()
-	log.SetFlags(0)
 
 	privateKey, err := wgtypes.GeneratePrivateKey()
 	publicKey := privateKey.PublicKey().String()
@@ -50,7 +49,7 @@ func main() {
 	check(err)
 
 	u := url.URL{Scheme: "ws", Host: *addr, Path: "/channel/" + *wgInterface}
-	log.Printf("connecting to %s", u.String())
+	log.Printf("CONNECT %s", u.String())
 
 	d := websocket.Dialer{Subprotocols: []string{subProtocol}}
 	c, _, err := d.Dial(u.String(), nil)
@@ -67,7 +66,7 @@ func main() {
 				log.Println("read:", err)
 				return
 			}
-			log.Printf("recv: %s", string(message))
+			log.Printf("RECV %s %s", *wgInterface, string(message))
 
 			s := strings.Split(string(message), " ")
 			action := s[0]
@@ -92,7 +91,7 @@ func main() {
 				log.Println("couldn't update interface:", err)
 				return
 			}
-			log.Printf("Updated interface: %s %s %s %s", action, uid, ip, publicKey)
+			log.Printf("CONF %s %s %s %s %s %s", *wgInterface, action, ip, publicKey, presharedKey, uid)
 		}
 	}()
 
