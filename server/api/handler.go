@@ -2,9 +2,7 @@ package main
 
 import (
 	"encoding/base64"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"strings"
 
 	"github.com/go-redis/redis/v8"
@@ -35,6 +33,9 @@ func assignIP(cidr string, rc *redis.Client) (ip string, err error) {
 // that are expiring soon. In all cases, an error, the IP, and all keys for the
 // peer are returned to be served by the web server.
 func handleClient(uid string, clientPublicKey string, serverNetwork string, server Peer, redisClient *redis.Client) (err error, ip string, publicKey string, presharedKey string) {
+	redisChannel := server.Interface
+	redisUsers := server.Interface + "_users"
+
 	rc := redisClient
 	user, err := rc.HMGet(ctx, uid, "ip", "pubkey", "psk").Result()
 	check(err)
@@ -56,7 +57,7 @@ func handleClient(uid string, clientPublicKey string, serverNetwork string, serv
 			b64 := base64.StdEncoding.EncodeToString([]byte(ref))
 
 			// Remove stale base64 string from Redis.
-			err = rc.SRem(ctx, "users", b64).Err()
+			err = rc.SRem(ctx, redisUsers, b64).Err()
 			check(err)
 
 			// Free up IP.
@@ -65,7 +66,7 @@ func handleClient(uid string, clientPublicKey string, serverNetwork string, serv
 
 			// Publish on our channel.
 			a := "DEL " + ref
-			err = rc.Publish(ctx, server.Interface, a).Err()
+			err = rc.Publish(ctx, redisChannel, a).Err()
 			check(err)
 		}
 
@@ -99,7 +100,7 @@ func handleClient(uid string, clientPublicKey string, serverNetwork string, serv
 		s := ip + " " + clientPublicKey + " " + presharedKey + " " + uid
 		b64 := base64.StdEncoding.EncodeToString([]byte(s))
 
-		err = rc.SAdd(ctx, "users", b64).Err()
+		err = rc.SAdd(ctx, redisUsers, b64).Err()
 		check(err)
 
 		// Use mullvad/message-queue here, and publish a message on this
@@ -108,7 +109,7 @@ func handleClient(uid string, clientPublicKey string, serverNetwork string, serv
 		// client listen on this URL and have it configure its interface
 		// with this peer (WIP).
 		a := "ADD " + s
-		err = rc.Publish(ctx, server.Interface, a).Err()
+		err = rc.Publish(ctx, redisChannel, a).Err()
 		check(err)
 
 	} else {
@@ -116,7 +117,13 @@ func handleClient(uid string, clientPublicKey string, serverNetwork string, serv
 		publicKey = user[1].(string)
 		presharedKey = user[2].(string)
 
-		log.Printf("Found existing WireGuard peer %s %s %s", uid, ip, publicKey)
+		// Always publish, so we can handle WireGguard server restarts
+		// properly.
+		s := "ADD " + ip + " " + publicKey + " " + presharedKey + " " + uid
+		err = rc.Publish(ctx, redisChannel, s).Err()
+		check(err)
+
+		log.Printf("EXIST: %s %s %s", uid, ip, publicKey)
 	}
 	ipCidrString := getIpCidrString(ip, serverNetwork)
 	return nil, ipCidrString, publicKey, presharedKey
@@ -126,7 +133,10 @@ func handleClient(uid string, clientPublicKey string, serverNetwork string, serv
 // expired. Returns a peer list for updateInterface with expired configs, with
 // the toRemove flag indicating that the server should remove the peer.
 func getPeerList(serverName string, rc *redis.Client) error {
-	users, err := rc.SMembers(ctx, "users").Result()
+	redisChannel := serverName
+	redisUsers := serverName + "_users"
+
+	users, err := rc.SMembers(ctx, redisUsers).Result()
 	check(err)
 
 	keys, err := rc.Keys(ctx, "*@*").Result()
@@ -147,7 +157,7 @@ func getPeerList(serverName string, rc *redis.Client) error {
 			// set toRemove to true, and remove the stale entries.
 			if !stringInSlice(uid, keys) {
 				// Remove stale base64 string from Redis.
-				err = rc.SRem(ctx, "users", b64).Err()
+				err = rc.SRem(ctx, redisUsers, b64).Err()
 				check(err)
 
 				// Free up IP.
@@ -156,7 +166,7 @@ func getPeerList(serverName string, rc *redis.Client) error {
 
 				// Publish on our channel.
 				a := "DEL " + string(decoded)
-				err = rc.Publish(ctx, serverName, a).Err()
+				err = rc.Publish(ctx, redisChannel, a).Err()
 				check(err)
 			}
 		}
@@ -200,26 +210,6 @@ func getServerInfo(serverInterface string, rc *redis.Client) (serverEndpoint str
 		serverAllowedIPs = res[4].(string)
 		serverDNS = res[5].(string)
 	}
-
-	return serverEndpoint, serverPort, serverPublicKey, serverNetwork, serverAllowedIPs, serverDNS
-}
-
-func getRequest(url string) (serverEndpoint string, serverPort string, serverPublicKey string, serverNetwork string, serverAllowedIPs string, serverDNS string) {
-	resp, err := http.Get(url)
-	check(err)
-
-	body, err := ioutil.ReadAll(resp.Body)
-	check(err)
-
-	s := string(body)
-	log.Printf(s)
-
-	serverEndpoint = strings.Split(s, " ")[0]
-	serverPort = strings.Split(s, " ")[1]
-	serverPublicKey = strings.Split(s, " ")[2]
-	serverNetwork = strings.Split(s, " ")[3]
-	serverAllowedIPs = strings.Split(s, " ")[4]
-	serverDNS = strings.Split(s, " ")[5]
 
 	return serverEndpoint, serverPort, serverPublicKey, serverNetwork, serverAllowedIPs, serverDNS
 }

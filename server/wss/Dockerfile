@@ -5,7 +5,7 @@ RUN go mod init wss \
  && go get github.com/gorilla/websocket \
  && go get golang.zx2c4.com/wireguard/wgctrl
 
-COPY main.go .
+COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux \
     go build -o wss *.go

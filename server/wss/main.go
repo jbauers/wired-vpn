@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
@@ -26,71 +24,6 @@ var wgPort = flag.Int("port", 51820, "WireGuard listen port")
 var wgNetwork = flag.String("network", "10.100.0.1/24", "WireGuard network")
 var wgAllowedIPs = flag.String("allowed-ips", "10.0.0.0/8", "WireGuard allowed IPs")
 var wgDNS = flag.String("dns", "1.1.1.1", "WireGuard DNS")
-
-func check(e error) {
-	if e != nil {
-		log.Panic(e)
-	}
-}
-
-// The allowed IPv4 for clients to be added to the server may only be a /32,
-// but wgctrl expects a list. This function returns the list with a single
-// entry from an IP string.
-func getAllowedIP(ip string) []net.IPNet {
-	_, ipnet, err := net.ParseCIDR("0.0.0.0/32")
-	check(err)
-
-	network := *ipnet
-	network.IP = net.ParseIP(ip)
-
-	return []net.IPNet{network}
-}
-
-// Takes the IP, public key, pre-shared key as strings, and a bool whether the
-// peer should be removed or added to the interface, and returns the wgtypes
-// peer config for this peer. This config is then applied as part of
-// updateInterface, which expects a list of these peer configs.
-func getPeerConfig(ip string, publicKey string, presharedKey string, toRemove bool) (peerConfig wgtypes.PeerConfig) {
-	pub, err := wgtypes.ParseKey(publicKey)
-	check(err)
-
-	psk, err := wgtypes.ParseKey(presharedKey)
-	check(err)
-
-	allowedIPs := getAllowedIP(ip)
-
-	peerConfig = wgtypes.PeerConfig{
-		PublicKey:         pub,
-		PresharedKey:      &psk,
-		Remove:            toRemove,
-		AllowedIPs:        allowedIPs,
-		ReplaceAllowedIPs: false,
-	}
-
-	return peerConfig
-}
-
-// Takes a list of peer configs and applies the config to the server specified.
-// Peers are not replaced, instead the peer configs indicate whether a peer
-// should be removed or appended to the server. Rotating peers works by passing
-// both the stale and new configs as part of the peer list, with the toRemove
-// flag indicating what to do (see getPeerConfig).
-func updateInterface(privateKey wgtypes.Key, peerList []wgtypes.PeerConfig) error {
-	wc, err := wgctrl.New()
-	check(err)
-
-	port := *wgPort
-
-	config := wgtypes.Config{
-		PrivateKey:   &privateKey,
-		ListenPort:   &port,
-		Peers:        peerList,
-		ReplacePeers: false,
-	}
-
-	err = wc.ConfigureDevice(*wgInterface, config)
-	return err
-}
 
 func main() {
 	flag.Parse()
@@ -114,18 +47,14 @@ func main() {
 
 	// FIXME: Response handling.
 	_, err = http.PostForm("http://api:8081/register", data)
-	if err != nil {
-		log.Fatal("post:", err)
-	}
+	check(err)
 
 	u := url.URL{Scheme: "ws", Host: *addr, Path: "/channel/" + *wgInterface}
 	log.Printf("connecting to %s", u.String())
 
 	d := websocket.Dialer{Subprotocols: []string{subProtocol}}
 	c, _, err := d.Dial(u.String(), nil)
-	if err != nil {
-		log.Fatal("dial:", err)
-	}
+	check(err)
 	defer c.Close()
 
 	done := make(chan struct{})
