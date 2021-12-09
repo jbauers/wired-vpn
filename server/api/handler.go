@@ -117,12 +117,6 @@ func handleClient(uid string, clientPublicKey string, serverNetwork string, serv
 		publicKey = user[1].(string)
 		presharedKey = user[2].(string)
 
-		// Always publish, so we can handle WireGguard server restarts
-		// properly.
-		s := "ADD " + ip + " " + publicKey + " " + presharedKey + " " + uid
-		err = rc.Publish(ctx, redisChannel, s).Err()
-		check(err)
-
 		log.Printf("EXIST: %s %s %s", uid, ip, publicKey)
 	}
 	ipCidrString := getIpCidrString(ip, serverNetwork)
@@ -132,7 +126,7 @@ func handleClient(uid string, clientPublicKey string, serverNetwork string, serv
 // Periodically fetches user configs from Redis, and checks if a uid key has
 // expired. Returns a peer list for updateInterface with expired configs, with
 // the toRemove flag indicating that the server should remove the peer.
-func getPeerList(serverName string, rc *redis.Client) error {
+func getPeerList(serverName string, newServer bool, rc *redis.Client) error {
 	redisChannel := serverName
 	redisUsers := serverName + "_users"
 
@@ -150,6 +144,8 @@ func getPeerList(serverName string, rc *redis.Client) error {
 			s := strings.Split(string(decoded), " ")
 
 			ip := s[0]
+			publicKey := s[1]
+			presharedKey := s[2]
 			uid := s[3]
 
 			// When both the base64 string and uid key exist, we'll
@@ -168,6 +164,12 @@ func getPeerList(serverName string, rc *redis.Client) error {
 				a := "DEL " + string(decoded)
 				err = rc.Publish(ctx, redisChannel, a).Err()
 				check(err)
+			} else if newServer {
+				// Handle WireGguard server restarts properly.
+				s := "ADD " + ip + " " + publicKey + " " + presharedKey + " " + uid
+				err = rc.Publish(ctx, redisChannel, s).Err()
+				check(err)
+				log.Printf("RE-ADD: %s %s %s", uid, ip, publicKey)
 			}
 		}
 	}
@@ -176,7 +178,6 @@ func getPeerList(serverName string, rc *redis.Client) error {
 }
 
 func setServerInfo(serverInterface string, serverEndpoint string, serverPort string, serverPublicKey string, serverNetwork string, serverAllowedIPs string, serverDNS string, rc *redis.Client) (err error) {
-
 	serverIP := strings.Split(serverNetwork, "/")[0]
 	err = rc.SAdd(ctx, "usedIPs", serverIP).Err()
 	check(err)
@@ -190,6 +191,7 @@ func setServerInfo(serverInterface string, serverEndpoint string, serverPort str
 		"dns":        serverDNS,
 	}
 	err = rc.HMSet(ctx, serverInterface, peer).Err()
+	log.Printf("SERVER: %s", serverInterface)
 
 	return err
 }

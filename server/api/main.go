@@ -193,6 +193,13 @@ func main() {
 				check(err)
 
 				io.WriteString(w, "ok")
+
+				// Publish currently stored users from Redis.
+				go func() {
+					time.Sleep(2 * time.Second)
+					err := getPeerList(serverInterface, true, rc)
+					check(err)
+				}()
 			default:
 				io.WriteString(w, "Sorry, only POST supported.")
 			}
@@ -208,7 +215,7 @@ func main() {
 		for true {
 			time.Sleep(10 * time.Second)
 			for name, _ := range settings.Interfaces {
-				err := getPeerList(name, rc)
+				err := getPeerList(name, false, rc)
 				check(err)
 			}
 		}
