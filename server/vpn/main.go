@@ -17,7 +17,7 @@ import (
 
 const subProtocol = "message-queue-v1"
 
-var host = flag.String("host", "api", "API host")
+var host = flag.String("host", "control", "API host")
 var wsPort = flag.String("ws-port", "8080", "WS port on API host")
 var registerPort = flag.String("register-port", "8081", "Register port on API host")
 var wgInterface = flag.String("interface", "wg0", "WireGuard interface")

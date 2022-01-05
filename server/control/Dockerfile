@@ -1,7 +1,9 @@
 FROM golang as builder-mq
 WORKDIR /tmp/mq
 
-RUN git clone https://github.com/mullvad/message-queue .
+# Upstream directly would be nice, but it seems to be under heavy
+# development, so keep it safe for now...
+RUN git clone https://github.com/jbauers/message-queue .
 
 RUN CGO_ENABLED=0 GOOS=linux \
     go build -o mq *.go

@@ -1,21 +1,21 @@
 version: '3'
 
 services:
-  proxy:
-    build: ./proxy
+  auth:
+    build: ./auth
     ports:
       - 80:8080
       - 443:443
     depends_on:
-      - api
+      - control
     networks:
-      - web
+      - auth
     volumes:
       - ./ssl:/ssl:ro
       - ./settings.json:/settings.json:ro
 
-  api:
-    build: ./api
+  control:
+    build: ./control
     expose:
       - 8080
       - 8081
@@ -30,13 +30,13 @@ services:
       - redis
     networks:
       - redis
-      - web
-      - wss
+      - auth
+      - vpn
     volumes:
       - ./settings.json:/settings.json.tpl:ro
 
-  wss0:
-    build: ./wss
+  vpn0:
+    build: ./vpn
     ports:
       - 51820:51820/udp
     environment:
@@ -46,24 +46,24 @@ services:
     cap_add:
       - NET_ADMIN
     depends_on:
-      - api
+      - control
     networks:
-      - wss
+      - vpn
 
-  wss1:
+  vpn1:
     ports:
       - 51821:51821/udp
     environment:
       - WG_INTERFACE=wg1
       - WG_NETWORK=10.100.0.1/24
       - WG_PORT=51821
-    build: ./wss
+    build: ./vpn
     cap_add:
       - NET_ADMIN
     depends_on:
-      - api
+      - control
     networks:
-      - wss
+      - vpn
 
   redis:
     image: "redis:alpine"
@@ -78,7 +78,7 @@ services:
 networks:
   redis:
     driver: bridge
-  web:
+  auth:
     driver: bridge
-  wss:
+  vpn:
     driver: bridge
