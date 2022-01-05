@@ -31,19 +31,6 @@ func getIpCidrString(ip string, cidr string) string {
 	return network.String()
 }
 
-// The allowed IPv4 for clients to be added to the server may only be a /32,
-// but wgctrl expects a list. This function returns the list with a single
-// entry from an IP string.
-func getAllowedIP(ip string) []net.IPNet {
-	_, ipnet, err := net.ParseCIDR("0.0.0.0/32")
-	check(err)
-
-	network := *ipnet
-	network.IP = net.ParseIP(ip)
-
-	return []net.IPNet{network}
-}
-
 // This function accepts a list of strings and returns the next IP not in this
 // list. If we overflow the server CIDR, an error is returned.
 func getAvailableIP(ips []string, cidr string) (string, error) {
@@ -90,21 +77,5 @@ func stringInSlice(s string, list []string) bool {
 func check(e error) {
 	if e != nil {
 		log.Panic(e)
-	}
-}
-
-// Log server info.
-func printServerInfo(servers Servers) {
-	for _, server := range servers.Peers {
-		log.Printf("---------------------- Backend ready -----------------------")
-		log.Printf(" Interface:  %s", server.Interface)
-		log.Printf(" Network:    %s", server.CIDR)
-		log.Printf(" Endpoint:   %s", server.Endpoint)
-		log.Printf(" Port:       %d", server.Port)
-		log.Printf(" PublicKey:  %s", server.PublicKey)
-		log.Printf(" DNS:        %s", server.DNS)
-		log.Printf(" Groups:     %s", server.Groups)
-		log.Printf(" AllowedIPs: %s", server.AllowedIPs)
-		log.Printf("------------------------------------------------------------")
 	}
 }
