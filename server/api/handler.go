@@ -166,6 +166,7 @@ func getPeerList(serverName string, newServer bool, rc *redis.Client) error {
 				err = rc.Publish(ctx, redisChannel, a).Err()
 				check(err)
 				log.Printf("SEND %s DEL %s %s %s %s", serverName, ip, publicKey, presharedKey, uid)
+
 			} else if newServer {
 				// Handle WireGguard server restarts properly.
 				s := "ADD " + ip + " " + publicKey + " " + presharedKey + " " + uid
